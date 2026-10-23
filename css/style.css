@@ -73,4 +73,5 @@ body.probe { padding: 0 12px; }
 .grid3 { grid-template-columns: repeat(3, 1fr); }
 .grid4 { grid-template-columns: repeat(4, 1fr); }
 .probe button { padding: 12px 6px; }
+.cam-preview { width: 100%; max-height: 40vh; object-fit: contain; border-radius: 8px; background: #000; display: block; margin: 6px 0; }
 .pad { height: 150px; border: 1px dashed var(--line); border-radius: 10px; display: grid; place-items: center; text-align: center; padding: 16px; color: var(--muted); font-size: 13px; touch-action: none; user-select: none; }

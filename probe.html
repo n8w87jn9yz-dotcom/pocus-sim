@@ -24,6 +24,17 @@
 <button id="sensorBtn" class="big">Sensoren starten</button>
 
 <section class="card">
+  <h2>Kamera-Tracking</h2>
+  <p class="small">Marker-Blatt aufrecht hinstellen, sodass die Rückkamera es in der Startlage sieht. Dann unten ansetzen.</p>
+  <button id="camBtn" class="big">Kamera-Tracking starten</button>
+  <div id="camBox" hidden>
+    <video id="camVideo" playsinline muted hidden></video>
+    <canvas id="camPreview" class="cam-preview"></canvas>
+    <p class="small" id="camStatus">Starte Kamera …</p>
+  </div>
+</section>
+
+<section class="card">
   <h2>Schallkopf</h2>
   <div class="buttons grid3" id="probeButtons"></div>
 </section>
@@ -55,6 +66,10 @@
 <p class="small center">Handy hochkant halten: Unterkante = Schallkopffläche, Bildschirm zu dir. Die linke Handykante ist die Markerseite.</p>
 
 <script src="vendor/peerjs.min.js"></script>
+<script src="vendor/js-aruco2/cv.js"></script>
+<script src="vendor/js-aruco2/aruco.js"></script>
+<script src="vendor/js-aruco2/svd.js"></script>
+<script src="vendor/js-aruco2/posit1.js"></script>
 <script type="module" src="js/probe.js"></script>
 </body>
 </html>

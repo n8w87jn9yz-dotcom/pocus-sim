@@ -8,6 +8,7 @@ const state = {
   probe: 'convex', win: 0, depth: PROBES.convex.def, gain: 1.0,
   frozen: false, cases: 0, hidden: false,
   slide: [0, 0],
+  track: null, trackInfo: '', bodyScale: 100,
 };
 const pose = { target: null, q: null, Rn: null, mouse: { rock: 0, fan: 0, rot: 0 }, source: 'mouse' };
 let conn = null;
@@ -112,10 +113,17 @@ function classAt(vol, p) {
 // Sondenursprung: Fensterpunkt plus Verschiebung, dann zurück auf die Haut gelegt
 function probeOrigin(vol, w) {
   const add = (a, b, k) => a.map((v, i) => v + b[i] * k);
-  let p = add(add(w.origin, w.L, state.slide[0] * 10), w.E, state.slide[1] * 10);
-  p = add(p, w.D, 40);
-  for (let i = 0; i < 160 && classAt(vol, p) !== 0; i++) p = add(p, w.D, -1);
-  return add(p, w.D, 1);
+  // Kamera-Tracking (mm am Übungsobjekt) auf die Größe des CT-Körpers umrechnen
+  const k = 100 / state.bodyScale;
+  const t = state.track || [0, 0, 0];
+  let p = add(add(w.origin, w.L, state.slide[0] * 10 + t[0] * k), w.E, state.slide[1] * 10 + t[2] * k);
+  // von außen entlang der Schallrichtung bis zur Haut laufen
+  const start = add(p, w.D, -80);
+  for (let i = 0; i < 200; i++) {
+    const q = add(start, w.D, i);
+    if (classAt(vol, q) !== 0) return q;
+  }
+  return p;
 }
 
 let lastM = currentMatrix();
@@ -183,7 +191,7 @@ function drawOverlay(M) {
     `<span>${state.hidden ? 'Fall verdeckt' : WINDOWS[state.win].name}</span>` +
     `<span>${p.name} ${p.mhz} MHz</span><span>Tiefe ${state.depth} cm</span><span>Gain ${state.gain.toFixed(2)}</span>` +
     `<span>Drehen ${deg(Math.atan2(L[2], L[0]))}° · Fächern ${deg(Math.asin(Math.max(-1, Math.min(1, Dn[2]))))}° · Kippen ${deg(Math.asin(Math.max(-1, Math.min(1, Dn[0]))))}°</span>` +
-    `<span class="${pose.source === 'phone' ? 'ok' : ''}">${pose.source === 'phone' ? 'Handy' : 'Maus'}</span>`;
+    `${state.trackInfo ? `<span>${state.trackInfo}</span>` : ''}<span class="${pose.source === 'phone' ? 'ok' : ''}">${pose.source === 'phone' ? 'Handy' : 'Maus'}</span>`;
 }
 
 let last = performance.now();
@@ -208,6 +216,7 @@ function setProbe(key) {
 function setWindow(i) {
   state.win = i;
   state.slide = [0, 0];
+  state.track = null;
   syncUI();
 }
 function changeDepth(d) {
@@ -290,6 +299,7 @@ function buildUI() {
   $('revealBtn').addEventListener('click', () => { state.hidden = false; syncUI(); });
   $('depth').addEventListener('input', e => { state.depth = +e.target.value; syncUI(); });
   $('gain').addEventListener('input', e => { state.gain = +e.target.value; syncUI(); });
+  $('bodyScale').addEventListener('input', e => { state.bodyScale = +e.target.value; $('bodyScaleVal').textContent = `${state.bodyScale} %`; });
   $('freezeBtn').addEventListener('click', () => { state.frozen = !state.frozen; syncUI(); });
   $('calibBtn').addEventListener('click', calibrate);
 }
@@ -341,6 +351,10 @@ function onData(m) {
     case 'calib': calibrate(); break;
     case 'anchor': if (WINDOWS[m.v]) { setWindow(m.v); calibrate(); } break;
     case 'slide': slide(m.dx, m.dz); break;
+    case 'track':
+      if (m.ok) state.track = m.d;
+      state.trackInfo = m.ok ? `Kamera: Blatt ${m.id}` : (m.anchored ? 'Kamera: kein Blatt im Bild' : 'Kamera: noch nicht angesetzt');
+      break;
     case 'hello': sendState(); break;
   }
 }
