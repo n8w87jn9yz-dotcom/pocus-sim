@@ -2,6 +2,12 @@
 // Volumen-Koordinaten in mm (RAS). Pro Pixel wird der Schallstrahl von der Sonde bis zum Bildpunkt
 // abgetastet: Dämpfung, Schallschatten hinter Knochen, Reverberation oder Spiegelbild hinter Gas.
 
+import { TISSUES } from './common.js';
+
+const f3 = v => `vec3(${v.map(x => x.toFixed(3)).join(',')})`;
+const PAL = `const vec3 PAL[16] = vec3[16](${TISSUES.map(t => f3(t.rgb)).join(', ')});
+const int TINTMASK = ${TISSUES.reduce((m, t, i) => m | (t.tint ? 1 << i : 0), 0)};`;
+
 export const VERT = `#version 300 es
 in vec2 aPos;
 void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
@@ -14,10 +20,11 @@ uniform vec3 uDims;
 uniform float uSpacing;
 uniform vec2 uRes;
 uniform float uDepth, uGain, uTime, uTop;
-uniform int uProbe, uWin, uCase, uDebug;
+uniform int uProbe, uWin, uCase, uDebug, uTint;
 uniform vec3 uOrigin;   // Sondenmitte auf der Haut, mm
 uniform mat3 uRot;      // Spalten: lateral, Tiefe, Elevation (Welt)
 out vec4 outColor;
+${PAL}
 
 // Gewebeklassen wie in tools/build_volume.py
 const int AIR = 0, GAS = 1, FAT = 2, SOFT = 3, LIVER = 4, SPLEEN = 5, KIDNEY = 6, SINUS = 7, BLOOD = 8,
@@ -118,6 +125,21 @@ void main(){
     s2 = vec2(0.0); len = rho;
     mask = 1.0 - smoothstep(0.76, 0.78, abs(th));
   }
+  // Anatomieansicht: ganze Schnittebene in Gewebefarben, außerhalb des Fächers abgedunkelt
+  if (uDebug == 1){
+    if (ic.y < -uTop){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+    float o = 0.0;
+    for (int i = 0; i < 30; i++){
+      if (classAt(uOrigin + uRot[1]*o) != AIR) break;
+      o += 1.0;
+    }
+    vec3 Pa = uOrigin + uRot*(vec3(ic.x, max(ic.y, 0.0), 0.0)*10.0) + uRot[1]*(o >= 30.0 ? 0.0 : o);
+    vec3 col = PAL[classAt(Pa)];
+    float edge = ok ? 1.0 - mask : 0.0;
+    col = mix(col*(ok ? 1.0 : 0.35), vec3(0.3, 0.7, 1.0), edge);
+    if (ic.y < 0.0) col *= 0.2;
+    outColor = vec4(col, 1.0); return;
+  }
   if (!ok){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
 
   // Konvexe Sonde: Ankopplungsfläche liegt auf der Haut, nicht darüber
@@ -138,13 +160,6 @@ void main(){
   S += dir*off;
   P += dir*off;
 
-  if (uDebug == 1){
-    int dc = classAt(P);
-    vec3 pal[16] = vec3[16](vec3(0), vec3(0.2,0.2,0.9), vec3(0.9,0.9,0.3), vec3(0.6), vec3(0.6,0.3,0.1), vec3(0.6,0.1,0.5),
-      vec3(0.9,0.5,0.1), vec3(1.0,0.8,0.5), vec3(0.9,0.0,0.0), vec3(0.8,0.3,0.3), vec3(1.0), vec3(0.3,0.7,0.3),
-      vec3(0.0,0.6,0.9), vec3(1.0,0.7,0.7), vec3(0.7,0.2,0.2), vec3(0.4,0.9,0.9));
-    outColor = vec4(pal[dc]*mask, 1.0); return;
-  }
 
   float att = 0.0, boneD = -1.0, gasD = -1.0, prev = 0.0;
   int before = SKIN;
@@ -210,5 +225,11 @@ void main(){
   float I = uGain * e * speckle * amp;
   float v = log(1.0 + 10.0*I) / log(11.0);
   v = clamp(v, 0.0, 1.0) * mask;
-  outColor = vec4(vec3(v) * vec3(1.0, 0.99, 0.96), 1.0);
+  vec3 col = vec3(v) * vec3(1.0, 0.99, 0.96);
+  // Organe leicht einfärben, damit man erkennt, was was ist
+  if (uTint == 1 && ((TINTMASK >> c) & 1) == 1 && boneD < 0.0 && gasD < 0.0){
+    vec3 pc = PAL[c] / max(max(PAL[c].r, PAL[c].g), PAL[c].b);
+    col = col*mix(vec3(1.0), pc, 0.35) + pc*0.05*mask;
+  }
+  outColor = vec4(col, 1.0);
 }`;

@@ -1,21 +1,24 @@
 import { VERT, FRAG } from './shader.js';
 import {
-  PROBES, WINDOWS, FINDINGS, SCENARIOS,
+  PROBES, WINDOWS, FINDINGS, SCENARIOS, TISSUES,
   matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
 } from './common.js';
+import { WebcamTracker } from './webcam.js';
 
 const state = {
   probe: 'convex', win: 0, depth: PROBES.convex.def, gain: 1.0,
   frozen: false, cases: 0, hidden: false,
   slide: [0, 0],
   track: null, trackInfo: '', bodyScale: 100,
+  anat: 'off', tint: false, note: '',
 };
+let tracker = null;
 const pose = { target: null, q: null, Rn: null, mouse: { rock: 0, fan: 0, rot: 0 }, source: 'mouse' };
 let conn = null;
 let time = 0;
 
 const $ = id => document.getElementById(id);
-const usCanvas = $('us'), overlay = $('overlay');
+const usCanvas = $('us'), overlay = $('overlay'), anatCanvas = $('anat');
 
 // ---------- WebGL ----------
 const gl = usCanvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
@@ -41,7 +44,7 @@ const aPos = gl.getAttribLocation(prog, 'aPos');
 gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 const U = {};
-for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug']) U[n] = gl.getUniformLocation(prog, n);
+for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug', 'uTint']) U[n] = gl.getUniformLocation(prog, n);
 
 // Interne Auflösung bewusst niedrig, das Bild wird per CSS skaliert (?h=300 für schwache Rechner)
 const DEBUG = new URLSearchParams(location.search).has('debug');
@@ -53,8 +56,8 @@ function resize() {
   usCanvas.width = Math.round(w * scale);
   usCanvas.height = RENDER_H;
   const dpr = window.devicePixelRatio || 1;
-  overlay.width = Math.round(w * dpr);
-  overlay.height = Math.round(h * dpr);
+  overlay.width = anatCanvas.width = Math.round(w * dpr);
+  overlay.height = anatCanvas.height = Math.round(h * dpr);
 }
 window.addEventListener('resize', resize);
 
@@ -114,9 +117,8 @@ function classAt(vol, p) {
 function probeOrigin(vol, w) {
   const add = (a, b, k) => a.map((v, i) => v + b[i] * k);
   // Kamera-Tracking (mm am Übungsobjekt) auf die Größe des CT-Körpers umrechnen
-  const k = 100 / state.bodyScale;
-  const t = state.track || [0, 0, 0];
-  let p = add(add(w.origin, w.L, state.slide[0] * 10 + t[0] * k), w.E, state.slide[1] * 10 + t[2] * k);
+  const [ol, oe] = offsetMm();
+  let p = add(add(w.origin, w.L, ol), w.E, oe);
   // von außen entlang der Schallrichtung bis zur Haut laufen
   const start = add(p, w.D, -80);
   for (let i = 0; i < 200; i++) {
@@ -126,21 +128,47 @@ function probeOrigin(vol, w) {
   return p;
 }
 
+// Verschiebung (mm) im Fenstersystem: Pfeiltasten und Webcam, umgerechnet auf die Größe des CT-Körpers
+function offsetMm() {
+  const k = 100 / state.bodyScale;
+  const t = state.track || [0, 0, 0];
+  return [state.slide[0] * 10 + t[0] * k, state.slide[1] * 10 + t[2] * k];
+}
+
 let lastM = currentMatrix();
 function render() {
   gl.viewport(0, 0, usCanvas.width, usCanvas.height);
   const vol = currentVolume();
-  if (!vol) { gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
+  if (!vol) {
+    gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    if (state.anat === 'cut') anatCanvas.getContext('2d').clearRect(0, 0, anatCanvas.width, anatCanvas.height);
+    return;
+  }
   const w = vol.meta.windows[WINDOWS[state.win].key];
   const B = [0, 1, 2].map(r => [w.L[r], w.D[r], w.E[r]]);
   const M = matMul(B, lastM);
   const o = probeOrigin(vol, w);
+  const labels = (state.anat === 'cut' || state.tint) ? sampleLabels(vol, M, o) : null;
+  if (state.anat === 'cut') {
+    drawPass(vol, M, o, 1);
+    const ctx = anatCanvas.getContext('2d');
+    ctx.drawImage(usCanvas, 0, 0, anatCanvas.width, anatCanvas.height);
+    drawLabels(ctx, labels.all, anatCanvas.width, anatCanvas.height);
+  }
+  if (state.anat === 'body') drawBody(w, M);
+  drawPass(vol, M, o, DEBUG ? 1 : 0);
+  drawOverlay(lastM);
+  if (state.tint) drawLabels(overlay.getContext('2d'), labels.fan, overlay.width, overlay.height);
+}
+
+function drawPass(vol, M, o, debug) {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_3D, vol.tex);
   gl.uniform1i(U.uVol, 0);
   gl.uniform3f(U.uDims, ...vol.meta.dims);
   gl.uniform1f(U.uSpacing, vol.meta.spacing);
-  gl.uniform1i(U.uDebug, DEBUG ? 1 : 0);
+  gl.uniform1i(U.uDebug, debug);
+  gl.uniform1i(U.uTint, state.tint ? 1 : 0);
   gl.uniform2f(U.uRes, usCanvas.width, usCanvas.height);
   gl.uniform1f(U.uDepth, state.depth);
   gl.uniform1f(U.uGain, state.gain);
@@ -153,7 +181,85 @@ function render() {
   // spaltenweise: lateral, Tiefe, Elevation
   gl.uniformMatrix3fv(U.uRot, false, [M[0][0], M[1][0], M[2][0], M[0][1], M[1][1], M[2][1], M[0][2], M[1][2], M[2][2]]);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-  drawOverlay(lastM);
+}
+
+// Bildpunkt (cm, wie im Shader) im Fächer des aktuellen Schallkopfs?
+function inFan(x, y) {
+  if (state.probe === 'linear') return Math.abs(x) < 2 && y >= 0 && y <= state.depth;
+  if (state.probe === 'convex') {
+    const ry = y + 4, rho = Math.hypot(x, ry);
+    return Math.abs(Math.atan2(x, ry)) < 0.62 && rho >= 4 && rho - 4 <= state.depth;
+  }
+  return y > 0 && Math.hypot(x, y) <= state.depth && Math.abs(Math.atan2(x, y)) < 0.78;
+}
+
+// Grobes Raster über die Schnittebene: wo liegt welches Organ? Für die Beschriftung.
+const LABELED = TISSUES.map((t, i) => t.tint || i === 1 || i === 10);
+function sampleLabels(vol, M, o) {
+  const top = topOffset(), sc = usCanvas.height / (state.depth + top);
+  const halfW = usCanvas.width / 2 / sc;
+  const col = j => [M[0][j], M[1][j], M[2][j]];
+  const Lc = col(0), Dc = col(1);
+  let off = 0;
+  while (off < 30 && classAt(vol, o.map((v, i) => v + Dc[i] * off)) === 0) off++;
+  if (off >= 30) off = 0;
+  const all = new Map(), fan = new Map();
+  const NX = 48, NY = 40;
+  for (let iy = 0; iy < NY; iy++) {
+    const y = (iy + 0.5) / NY * state.depth;
+    for (let ix = 0; ix < NX; ix++) {
+      const x = ((ix + 0.5) / NX * 2 - 1) * halfW;
+      const p = o.map((v, i) => v + (Lc[i] * x + Dc[i] * y) * 10 + Dc[i] * off);
+      const c = classAt(vol, p);
+      if (!LABELED[c]) continue;
+      for (const m of inFan(x, y) ? [all, fan] : [all]) {
+        if (!m.has(c)) m.set(c, []);
+        m.get(c).push([x, y]);
+      }
+    }
+  }
+  return { all, fan };
+}
+
+function drawLabels(ctx, map, W, H) {
+  const top = topOffset(), sc = H / (state.depth + top), dpr = window.devicePixelRatio || 1;
+  ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  const placed = [];
+  // große Organe zuerst, Beschriftungen dürfen sich nicht überdecken
+  for (const [c, pts] of [...map].sort((a, b) => b[1].length - a[1].length)) {
+    if (pts.length < 6) continue;
+    // Beschriftung an den Rasterpunkt der Klasse, der ihrem Schwerpunkt am nächsten liegt
+    const m = pts.reduce((a, p) => [a[0] + p[0] / pts.length, a[1] + p[1] / pts.length], [0, 0]);
+    const p = pts.reduce((a, b) => (Math.hypot(b[0] - m[0], b[1] - m[1]) < Math.hypot(a[0] - m[0], a[1] - m[1]) ? b : a));
+    const x = W / 2 + p[0] * sc, y = (p[1] + top) * sc;
+    if (placed.some(([a, b]) => Math.abs(a - x) < 80 * dpr && Math.abs(b - y) < 18 * dpr)) continue;
+    placed.push([x, y]);
+    ctx.lineWidth = 3 * dpr;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeText(TISSUES[c].name, x, y);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(TISSUES[c].name, x, y);
+  }
+  ctx.textAlign = 'start';
+}
+
+// Körperansicht von vorn: Sonde als Strich mit Markerpunkt an der aktuellen Stelle
+const SPOTS = [[58, 128], [142, 120], [100, 112], [100, 218], [74, 72], [126, 72]];
+const FOOT_MM = { linear: 40, convex: 60, phased: 20 };
+function drawBody(w, M) {
+  const [ol, oe] = offsetMm();
+  const off = [0, 1, 2].map(i => w.L[i] * ol + w.E[i] * oe);
+  // Patient von vorn: seine rechte Seite (RAS +x) links im Bild, kranial (+z) oben; 0,5 Einheiten pro mm
+  const [sx, sy] = SPOTS[state.win];
+  const cx = sx - off[0] * 0.5, cy = sy - off[2] * 0.5;
+  const L = [-M[0][0], -M[2][0]], D = [-M[0][1], -M[2][1]];
+  const len = FOOT_MM[state.probe] * 0.25;
+  $('pmLine').setAttribute('x1', cx - L[0] * len); $('pmLine').setAttribute('y1', cy - L[1] * len);
+  $('pmLine').setAttribute('x2', cx + L[0] * len); $('pmLine').setAttribute('y2', cy + L[1] * len);
+  $('pmDot').setAttribute('cx', cx - L[0] * (len + 4)); $('pmDot').setAttribute('cy', cy - L[1] * (len + 4));
+  $('pmBeam').setAttribute('x1', cx); $('pmBeam').setAttribute('y1', cy);
+  $('pmBeam').setAttribute('x2', cx + D[0] * 30); $('pmBeam').setAttribute('y2', cy + D[1] * 30);
 }
 
 function drawOverlay(M) {
@@ -191,7 +297,7 @@ function drawOverlay(M) {
     `<span>${state.hidden ? 'Fall verdeckt' : WINDOWS[state.win].name}</span>` +
     `<span>${p.name} ${p.mhz} MHz</span><span>Tiefe ${state.depth} cm</span><span>Gain ${state.gain.toFixed(2)}</span>` +
     `<span>Drehen ${deg(Math.atan2(L[2], L[0]))}° · Fächern ${deg(Math.asin(Math.max(-1, Math.min(1, Dn[2]))))}° · Kippen ${deg(Math.asin(Math.max(-1, Math.min(1, Dn[0]))))}°</span>` +
-    `${state.trackInfo ? `<span>${state.trackInfo}</span>` : ''}<span class="${pose.source === 'phone' ? 'ok' : ''}">${pose.source === 'phone' ? 'Handy' : 'Maus'}</span>`;
+    `${state.trackInfo ? `<span>${state.trackInfo}</span>` : ''}${state.note ? `<span class="ok">${state.note}</span>` : ''}<span class="${pose.source === 'phone' ? 'ok' : ''}">${pose.source === 'phone' ? 'Handy' : 'Maus'}</span>`;
 }
 
 let last = performance.now();
@@ -217,6 +323,7 @@ function setWindow(i) {
   state.win = i;
   state.slide = [0, 0];
   state.track = null;
+  tracker?.reset();
   syncUI();
 }
 function changeDepth(d) {
@@ -229,7 +336,43 @@ function calibrate() {
   pose.Rn = q ? matFromQuat(q) : null;
   pose.mouse = { rock: 0, fan: 0, rot: 0 };
   state.slide = [0, 0];
+  state.track = null;
+  tracker?.anchor();
   lastM = currentMatrix();
+}
+
+function setAnat(mode) {
+  state.anat = mode;
+  $('anatWrap').hidden = mode === 'off';
+  $('anat').hidden = mode !== 'cut';
+  $('bodyView').toggleAttribute('hidden', mode !== 'body');   // SVG kennt .hidden nicht
+  $('anatTitle').textContent = mode === 'cut' ? 'Anatomie im Schnitt' : 'Sondenposition';
+  resize();
+  syncUI();
+}
+
+function showNote(text) {
+  state.note = text;
+  clearTimeout(showNote.timer);
+  showNote.timer = setTimeout(() => { state.note = ''; }, 4000);
+}
+
+// NFC-Tag: probe.html?s=<Szenario> lädt einen verdeckten Fall, ?w=<Fenster> wählt das Schallfenster
+function applyTag(m) {
+  if (m.s === 'random') { randomCase(); showNote('NFC: Zufallsfall geladen'); }
+  const sc = SCENARIOS.find(x => x.id === m.s);
+  if (sc) { state.cases = sc.cases; state.hidden = true; showNote('NFC: Fall geladen'); }
+  const wi = WINDOWS.findIndex(x => x.key === m.w);
+  if (wi >= 0) { setWindow(wi); showNote(`NFC: ${WINDOWS[wi].name}`); }
+  syncUI();
+}
+
+function randomCase() {
+  let c = 0;
+  for (const f of FINDINGS) if (Math.random() < 0.3) c |= f.bit;
+  if ((c & 48) === 48) c &= ~32;
+  state.cases = c;
+  state.hidden = true;
 }
 
 function syncUI() {
@@ -242,6 +385,8 @@ function syncUI() {
   $('gain').value = state.gain;
   $('gainVal').textContent = state.gain.toFixed(2);
   $('freezeBtn').classList.toggle('active', state.frozen);
+  for (const b of document.querySelectorAll('#anatButtons button')) b.classList.toggle('active', b.dataset.mode === state.anat);
+  $('tint').checked = state.tint;
   const hint = WINDOWS[state.win].hint;
   $('winHint').textContent = hint === state.probe ? '' : `Üblich für dieses Fenster: ${PROBES[hint].name}`;
   $('findings').hidden = state.hidden;
@@ -267,8 +412,7 @@ function button(label, onClick, data = {}) {
 function buildUI() {
   for (const [key, p] of Object.entries(PROBES)) $('probeButtons').append(button(p.name, () => setProbe(key), { key }));
   WINDOWS.forEach((w, i) => $('winButtons').append(button(`${i + 1} ${w.name}`, () => setWindow(i), { i })));
-  const spots = [[58, 128], [142, 120], [100, 112], [100, 218], [74, 72], [126, 72]];
-  spots.forEach(([x, y], i) => {
+  SPOTS.forEach(([x, y], i) => {
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     Object.assign(c.dataset, { i });
     c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 9);
@@ -288,14 +432,11 @@ function buildUI() {
     l.append(c, ' ' + f.name);
     $('findings').append(l);
   }
-  $('randomBtn').addEventListener('click', () => {
-    let c = 0;
-    for (const f of FINDINGS) if (Math.random() < 0.3) c |= f.bit;
-    if ((c & 48) === 48) c &= ~32;
-    state.cases = c;
-    state.hidden = true;
-    syncUI();
-  });
+  $('randomBtn').addEventListener('click', () => { randomCase(); syncUI(); });
+  for (const b of document.querySelectorAll('#anatButtons button')) b.addEventListener('click', () => setAnat(b.dataset.mode));
+  $('tint').addEventListener('change', e => { state.tint = e.target.checked; });
+  $('camBtn').addEventListener('click', toggleWebcam);
+  buildTagList();
   $('revealBtn').addEventListener('click', () => { state.hidden = false; syncUI(); });
   $('depth').addEventListener('input', e => { state.depth = +e.target.value; syncUI(); });
   $('gain').addEventListener('input', e => { state.gain = +e.target.value; syncUI(); });
@@ -327,6 +468,8 @@ function bindMouse() {
     else if (k === 's') setProbe('phased');
     else if (k === 'f') { state.frozen = !state.frozen; syncUI(); }
     else if (k === 'n') calibrate();
+    else if (k === 'a') setAnat({ off: 'cut', cut: 'body', body: 'off' }[state.anat]);
+    else if (k === 't') { state.tint = !state.tint; syncUI(); }
     else if (e.key.startsWith('Arrow')) {
       const d = { ArrowLeft: [-0.3, 0], ArrowRight: [0.3, 0], ArrowUp: [0, 0.3], ArrowDown: [0, -0.3] }[e.key];
       slide(d[0], d[1]);
@@ -344,17 +487,8 @@ function onData(m) {
   switch (m.t) {
     case 'pose': pose.target = m.q; pose.source = 'phone'; break;
     case 'probe': if (m.v in PROBES) setProbe(m.v); break;
-    case 'window': if (WINDOWS[m.v]) setWindow(m.v); break;
-    case 'depth': changeDepth(m.d); break;
-    case 'gain': state.gain = Math.max(0.3, Math.min(3, state.gain + m.d)); syncUI(); break;
-    case 'freeze': state.frozen = !state.frozen; syncUI(); break;
-    case 'calib': calibrate(); break;
-    case 'anchor': if (WINDOWS[m.v]) { setWindow(m.v); calibrate(); } break;
-    case 'slide': slide(m.dx, m.dz); break;
-    case 'track':
-      if (m.ok) state.track = m.d;
-      state.trackInfo = m.ok ? `Kamera: Blatt ${m.id}` : (m.anchored ? 'Kamera: kein Blatt im Bild' : 'Kamera: noch nicht angesetzt');
-      break;
+    case 'calib': calibrate(); showNote('Kalibriert'); break;
+    case 'tag': applyTag(m); break;
     case 'hello': sendState(); break;
   }
 }
@@ -395,10 +529,61 @@ function startPeer() {
   peer.on('disconnected', () => setTimeout(() => { if (!peer.destroyed) peer.reconnect(); }, 3000));
 }
 
+// ---------- Webcam-Tracking (Marker hinten am Handy) ----------
+async function toggleWebcam() {
+  if (tracker) {
+    tracker.stop();
+    tracker = null;
+    state.track = null;
+    state.trackInfo = '';
+    $('camBtn').classList.remove('active');
+    $('camBtn').textContent = 'Webcam starten';
+    $('camBox').hidden = true;
+    return;
+  }
+  try {
+    tracker = new WebcamTracker($('camVideo'), $('camPreview'), () => (pose.q ? matFromQuat(pose.q) : null), onTrack);
+    await tracker.start();
+    $('camBtn').classList.add('active');
+    $('camBtn').textContent = 'Webcam stoppen';
+    $('camBox').hidden = false;
+  } catch (err) {
+    tracker = null;
+    $('camStatus').textContent = `Webcam nicht verfügbar: ${err.message}`;
+    $('camBox').hidden = false;
+  }
+}
+
+function onTrack(u) {
+  if (u.ok) state.track = u.d;
+  state.trackInfo = u.ok ? 'Webcam: verfolgt' : (!u.seen ? 'Webcam: Marker nicht im Bild' : (u.noGyro ? 'Webcam: Handy fehlt' : 'Webcam: kalibrieren'));
+  $('camStatus').textContent = u.ok ? `Verschiebung ${u.d.map(v => Math.round(v / 10)).join(' / ')} cm · Abstand ${u.dist} cm`
+    : !u.seen ? 'Marker nicht im Bild'
+    : u.noGyro ? 'Marker erkannt, Handy koppeln und Sensoren starten'
+    : 'Marker erkannt, Sonde ansetzen und am Handy „Kalibrieren“ tippen';
+}
+
+function buildTagList() {
+  const base = new URL('probe.html', location.href).href;
+  const rows = [
+    ...SCENARIOS.map(s => [`Fall: ${s.name}`, `${base}?s=${s.id}`]),
+    ['Fall: Zufall', `${base}?s=random`],
+    ...WINDOWS.map(w => [`Fenster: ${w.name}`, `${base}?w=${w.key}`]),
+  ];
+  for (const [label, url] of rows) {
+    const li = document.createElement('li');
+    const b = button('Kopieren', () => navigator.clipboard?.writeText(url).then(() => { b.textContent = 'Kopiert'; }));
+    const code = document.createElement('code');
+    code.textContent = url;
+    li.append(label, ' ', b, document.createElement('br'), code);
+    $('tagList').append(li);
+  }
+}
+
 buildUI();
 bindMouse();
 resize();
 syncUI();
 startPeer();
 requestAnimationFrame(loop);
-window.__sim = { state, pose, setWindow, setProbe, calibrate };
+window.__sim = { state, pose, setWindow, setProbe, calibrate, setAnat, applyTag };

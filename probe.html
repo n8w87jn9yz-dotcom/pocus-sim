@@ -21,55 +21,20 @@
   </form>
 </section>
 
-<button id="sensorBtn" class="big">Sensoren starten</button>
+<p class="small center" id="tagNote" hidden></p>
 
-<section class="card">
-  <h2>Kamera-Tracking</h2>
-  <p class="small">Marker-Blatt aufrecht hinstellen, sodass die Rückkamera es in der Startlage sieht. Dann unten ansetzen.</p>
-  <button id="camBtn" class="big">Kamera-Tracking starten</button>
-  <div id="camBox" hidden>
-    <video id="camVideo" playsinline muted hidden></video>
-    <canvas id="camPreview" class="cam-preview"></canvas>
-    <p class="small" id="camStatus">Starte Kamera …</p>
-  </div>
-</section>
+<!-- Unterkante des Bildschirms = Schallkopffläche, Punkt = Markerseite. Antippen wechselt den Schallkopf. -->
+<svg id="probeView" class="probe-view" viewBox="0 0 200 260" role="button" aria-label="Schallkopf wechseln">
+  <path id="probeShape" fill="#1a2532" stroke="#4fb3ff" stroke-width="3"/>
+  <circle id="probeMarker" r="7" fill="#4fb3ff"/>
+</svg>
+<p class="probe-name" id="probeName">–</p>
 
-<section class="card">
-  <h2>Schallkopf</h2>
-  <div class="buttons grid3" id="probeButtons"></div>
-</section>
+<button id="calibBtn" class="huge">Kalibrieren</button>
 
-<section class="card">
-  <h2>Ansetzen</h2>
-  <p class="small">Sonde in Standardlage auf das Fenster setzen (Phantom, Partner oder in der Luft) und das Fenster antippen.</p>
-  <div class="buttons grid2" id="winButtons"></div>
-</section>
-
-<section class="card">
-  <div class="buttons grid4">
-    <button data-cmd="depth" data-d="-1">Tiefe −</button>
-    <button data-cmd="depth" data-d="1">Tiefe +</button>
-    <button data-cmd="gain" data-d="-0.1">Gain −</button>
-    <button data-cmd="gain" data-d="0.1">Gain +</button>
-  </div>
-  <div class="buttons grid2">
-    <button data-cmd="freeze" id="freezeBtn">Freeze</button>
-    <button data-cmd="calib">Neutralstellung</button>
-  </div>
-</section>
-
-<section class="card">
-  <h2>Verschieben</h2>
-  <div id="pad" class="pad">Hier wischen, um die Sonde ein paar Zentimeter zu verschieben</div>
-</section>
-
-<p class="small center">Handy hochkant halten: Unterkante = Schallkopffläche, Bildschirm zu dir. Die linke Handykante ist die Markerseite.</p>
+<p class="small center">Handy hochkant halten: Unterkante = Schallkopffläche, Bildschirm zu dir, linke Kante = Markerseite. Fenster, Tiefe und Befunde stellst du am Rechner ein. Schallkopf wechseln: Bild antippen.</p>
 
 <script src="vendor/peerjs.min.js"></script>
-<script src="vendor/js-aruco2/cv.js"></script>
-<script src="vendor/js-aruco2/aruco.js"></script>
-<script src="vendor/js-aruco2/svd.js"></script>
-<script src="vendor/js-aruco2/posit1.js"></script>
 <script type="module" src="js/probe.js"></script>
 </body>
 </html>

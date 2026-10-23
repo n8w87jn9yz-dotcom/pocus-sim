@@ -1,12 +1,23 @@
-import { PROBES, WINDOWS, quatFromEuler, matFromQuat } from './common.js';
-import { Tracker } from './tracker.js';
+import { PROBES, WINDOWS, SCENARIOS, quatFromEuler } from './common.js';
 
 const $ = id => document.getElementById(id);
 let conn = null;
 let wakeLock = null;
 let peer = null;
 let gotEvent = false;
-let tracker = null;
+let sensorsOn = false;
+let probe = 'convex';
+
+// NFC-Tag-Adresse (probe.html?s=… oder ?w=…), wird nach dem Verbinden an den Rechner geschickt
+const params = new URLSearchParams(location.search);
+let pendingTag = tagFrom(params);
+
+function tagFrom(p) {
+  const s = p.get('s'), w = p.get('w');
+  if (s && (s === 'random' || SCENARIOS.some(x => x.id === s))) return { t: 'tag', s };
+  if (w && WINDOWS.some(x => x.key === w)) return { t: 'tag', w };
+  return null;
+}
 
 function send(msg) {
   if (conn && conn.open) conn.send(msg);
@@ -15,6 +26,18 @@ function send(msg) {
 function setStatus(text, ok = false) {
   $('status').textContent = text;
   $('status').classList.toggle('ok', ok);
+}
+
+function sendTag(tag) {
+  if (!tag) return;
+  if (conn?.open) {
+    send(tag);
+    $('tagNote').hidden = false;
+    $('tagNote').textContent = tag.s ? 'Fall vom NFC-Tag geladen' : `Fenster vom NFC-Tag: ${WINDOWS.find(x => x.key === tag.w).name}`;
+    pendingTag = null;
+  } else {
+    pendingTag = tag;
+  }
 }
 
 // ---------- Kopplung ----------
@@ -32,18 +55,29 @@ function connect(code) {
       clearTimeout(timer);
       setStatus('Verbunden', true);
       $('pairBox').hidden = true;
+      try { localStorage.setItem('pocus-code', code); } catch { /* ohne Speicher muss neu gekoppelt werden */ }
       send({ t: 'hello' });
+      sendTag(pendingTag);
     });
-    conn.on('data', m => { if (m.t === 'state') showState(m); });
+    conn.on('data', m => { if (m.t === 'state' && m.probe in PROBES) showProbe(m.probe); });
     conn.on('close', () => { setStatus('Getrennt'); $('pairBox').hidden = false; });
   });
   peer.on('error', err => setStatus(err.type === 'peer-unavailable' ? 'Code nicht gefunden' : `Fehler: ${err.type}`));
 }
 
-function showState(s) {
-  for (const b of document.querySelectorAll('#probeButtons button')) b.classList.toggle('active', b.dataset.key === s.probe);
-  for (const b of document.querySelectorAll('#winButtons button')) b.classList.toggle('active', +b.dataset.i === s.win);
-  $('freezeBtn').classList.toggle('active', s.frozen);
+// ---------- Schallkopf-Anzeige ----------
+const SHAPES = {
+  linear: 'M40 150 h120 v80 q0 10 -10 10 h-100 q-10 0 -10 -10 z',
+  convex: 'M45 140 h110 v70 q-55 45 -110 0 z',
+  phased: 'M70 150 h60 v80 q0 10 -10 10 h-40 q-10 0 -10 -10 z',
+};
+function showProbe(key) {
+  probe = key;
+  $('probeShape').setAttribute('d', `M60 20 h80 l15 120 h-110 z ${SHAPES[key]}`);
+  const left = { linear: 40, convex: 45, phased: 70 }[key];
+  $('probeMarker').setAttribute('cx', left - 14);
+  $('probeMarker').setAttribute('cy', 200);
+  $('probeName').textContent = `${PROBES[key].name} · ${PROBES[key].mhz} MHz`;
 }
 
 // ---------- Sensoren ----------
@@ -51,12 +85,10 @@ let lastSent = 0;
 function onOrientation(e) {
   if (e.alpha === null) return;
   gotEvent = true;
-  const q = quatFromEuler(e.alpha, e.beta, e.gamma);
-  tracker?.setOrientation(matFromQuat(q));
   const now = performance.now();
   if (now - lastSent < 15) return;
   lastSent = now;
-  send({ t: 'pose', q });
+  send({ t: 'pose', q: quatFromEuler(e.alpha, e.beta, e.gamma) });
 }
 
 async function lockScreen() {
@@ -64,89 +96,66 @@ async function lockScreen() {
 }
 
 async function startSensors() {
-  if (!window.isSecureContext) { setStatus('HTTPS nötig für Sensoren'); return; }
+  if (!window.isSecureContext) { setStatus('HTTPS nötig für Sensoren'); return false; }
   try {
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
       const res = await DeviceOrientationEvent.requestPermission();
-      if (res !== 'granted') { setStatus('Sensoren abgelehnt'); return; }
+      if (res !== 'granted') { setStatus('Sensoren abgelehnt'); return false; }
     }
     window.addEventListener('deviceorientation', onOrientation);
-    $('sensorBtn').textContent = 'Sensoren laufen';
-    $('sensorBtn').classList.add('active');
+    sensorsOn = true;
     setTimeout(() => { if (!gotEvent) setStatus('Keine Sensordaten vom Handy'); }, 2000);
   } catch (err) {
     setStatus(`Sensorfehler: ${err.message}`);
+    return false;
   }
   lockScreen();
+  startNfc();
+  return true;
 }
 
-document.addEventListener('visibilitychange', async () => {
+// Android (Chrome) kann NFC-Tags direkt in der Seite lesen, das iPhone öffnet die Tag-Adresse selbst
+async function startNfc() {
+  if (!('NDEFReader' in window)) return;
+  try {
+    const reader = new NDEFReader();
+    await reader.scan();
+    reader.addEventListener('reading', ({ message }) => {
+      for (const r of message.records) {
+        if (r.recordType !== 'url') continue;
+        try { sendTag(tagFrom(new URL(new TextDecoder().decode(r.data)).searchParams)); } catch { /* fremder Tag */ }
+      }
+    });
+  } catch { /* NFC aus oder abgelehnt */ }
+}
+
+document.addEventListener('visibilitychange', () => {
   if (wakeLock && document.visibilityState === 'visible') lockScreen();
 });
 
-// ---------- Bedienelemente ----------
-function button(label, onClick, data = {}) {
-  const b = document.createElement('button');
-  b.textContent = label;
-  Object.assign(b.dataset, data);
-  b.addEventListener('click', onClick);
-  return b;
-}
-
-for (const [key, p] of Object.entries(PROBES)) $('probeButtons').append(button(p.name, () => send({ t: 'probe', v: key }), { key }));
-// Ansetzen: Fenster wählen und die aktuelle Haltung als Standardlage übernehmen (auch am Phantom)
-WINDOWS.forEach((w, i) => $('winButtons').append(button(w.name, () => { tracker?.anchor(); send({ t: 'anchor', v: i }); }, { i })));
-for (const b of document.querySelectorAll('[data-cmd]')) {
-  b.addEventListener('click', () => send({ t: b.dataset.cmd, d: +b.dataset.d || 0 }));
-}
-$('sensorBtn').addEventListener('click', startSensors);
-
-// ---------- Kamera-Tracking ----------
-let lastTrack = 0;
-function onTrack(u) {
-  $('camStatus').textContent = u.noGyro ? 'Erst „Sensoren starten“ tippen'
-    : u.ok ? `Blatt ${u.id}: ${u.d.map(v => Math.round(v / 10)).join(' / ')} cm`
-    : u.visible ? 'Blatt erkannt, jetzt ansetzen' : 'Kein Blatt im Bild';
-  const now = performance.now();
-  if (now - lastTrack < 33) return;
-  lastTrack = now;
-  send({ t: 'track', ok: u.ok, d: u.d, id: u.id, anchored: u.anchored });
-}
-
-$('camBtn').addEventListener('click', async () => {
-  if (tracker) {
-    tracker.stop();
-    tracker = null;
-    $('camBtn').classList.remove('active');
-    $('camBtn').textContent = 'Kamera-Tracking starten';
-    $('camBox').hidden = true;
-    return;
-  }
-  if (!window.isSecureContext) { setStatus('HTTPS nötig für die Kamera'); return; }
-  try {
-    tracker = new Tracker($('camVideo'), $('camPreview'), onTrack);
-    await tracker.start();
-    $('camBtn').classList.add('active');
-    $('camBtn').textContent = 'Kamera-Tracking stoppen';
-    $('camBox').hidden = false;
-  } catch (err) {
-    tracker = null;
-    setStatus(`Kamerafehler: ${err.message}`);
-  }
+// Erster Tipp startet die Sensoren (iPhone fragt dabei nach), jeder Tipp übernimmt die aktuelle Haltung als Standardlage
+$('calibBtn').addEventListener('click', async () => {
+  if (!sensorsOn && !(await startSensors())) return;
+  send({ t: 'calib' });
+  $('calibBtn').textContent = 'Kalibriert ✓';
+  setTimeout(() => { $('calibBtn').textContent = 'Kalibrieren'; }, 1200);
 });
+
+$('probeView').addEventListener('click', () => {
+  const keys = Object.keys(PROBES);
+  const next = keys[(keys.indexOf(probe) + 1) % keys.length];
+  showProbe(next);
+  send({ t: 'probe', v: next });
+});
+
 $('pairForm').addEventListener('submit', e => { e.preventDefault(); connect($('codeInput').value); });
 
-// Wischen verschiebt die Sonde: horizontal = lateral, vertikal = in Elevationsrichtung
-let last = null;
-const pad = $('pad');
-pad.addEventListener('pointerdown', e => { last = [e.clientX, e.clientY]; pad.setPointerCapture(e.pointerId); });
-pad.addEventListener('pointerup', () => { last = null; });
-pad.addEventListener('pointermove', e => {
-  if (!last) return;
-  const dx = (e.clientX - last[0]) * 0.02, dz = -(e.clientY - last[1]) * 0.02;
-  last = [e.clientX, e.clientY];
-  send({ t: 'slide', dx, dz });
-});
-
-const code = location.hash.slice(1);
+showProbe(probe);
+let saved = null;
+try { saved = localStorage.getItem('pocus-code'); } catch { /* kein Speicher */ }
+const code = location.hash.slice(1) || (pendingTag ? saved : null);
 if (code) { $('codeInput').value = code; connect(code); }
+else if (pendingTag) {
+  $('tagNote').hidden = false;
+  $('tagNote').textContent = 'Erst einmal per QR-Code koppeln, dann den Tag erneut antippen.';
+}

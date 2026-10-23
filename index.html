@@ -9,10 +9,25 @@
 <body class="monitor">
 <main class="layout">
   <section class="screen">
-    <div class="us-wrap" id="usWrap">
-      <canvas id="us"></canvas>
-      <canvas id="overlay"></canvas>
-      <p class="loading" id="loading" hidden>Lade CT …</p>
+    <div class="views">
+      <div class="us-wrap" id="usWrap">
+        <canvas id="us"></canvas>
+        <canvas id="overlay"></canvas>
+        <p class="loading" id="loading" hidden>Lade CT …</p>
+      </div>
+      <div class="anat-wrap" id="anatWrap" hidden>
+        <canvas id="anat"></canvas>
+        <svg id="bodyView" class="body-view" viewBox="0 0 200 260" hidden aria-label="Sondenposition am Körper">
+          <path d="M70 10 h60 q6 0 8 6 l6 28 q34 6 40 30 l-6 70 q-4 12 -14 12 l-6 90 q-2 8 -10 8 h-96 q-8 0 -10 -8 l-6 -90 q-10 0 -14 -12 l-6 -70 q6 -24 40 -30 l6 -28 q2 -6 8 -6z" class="torso"/>
+          <line x1="100" y1="44" x2="100" y2="104" class="sternum"/>
+          <path d="M62 112 q38 22 76 0" class="costal"/>
+          <text x="6" y="252" class="side">rechts</text><text x="194" y="252" class="side" text-anchor="end">links</text>
+          <line id="pmBeam" class="pm-beam"/>
+          <line id="pmLine" class="pm-line"/>
+          <circle id="pmDot" r="3" class="pm-dot"/>
+        </svg>
+        <p class="anat-title" id="anatTitle"></p>
+      </div>
     </div>
     <div class="readout" id="readout"></div>
   </section>
@@ -33,6 +48,16 @@
     </section>
 
     <section class="card">
+      <h2>Ansicht</h2>
+      <div class="buttons" id="anatButtons">
+        <button data-mode="off">Nur Ultraschall</button>
+        <button data-mode="cut">+ Anatomie im Schnitt</button>
+        <button data-mode="body">+ Sondenposition</button>
+      </div>
+      <label class="check"><input type="checkbox" id="tint"> Organe einfärben und beschriften</label>
+    </section>
+
+    <section class="card">
       <h2>Schallfenster</h2>
       <svg id="body" viewBox="0 0 200 260" class="body" aria-label="Körperskizze">
         <path d="M70 10 h60 q6 0 8 6 l6 28 q34 6 40 30 l-6 70 q-4 12 -14 12 l-6 90 q-2 8 -10 8 h-96 q-8 0 -10 -8 l-6 -90 q-10 0 -14 -12 l-6 -70 q6 -24 40 -30 l6 -28 q2 -6 8 -6z" class="torso"/>
@@ -48,11 +73,22 @@
       <div class="buttons" id="probeButtons"></div>
       <label class="slider">Tiefe <input type="range" id="depth" step="1"><span id="depthVal"></span></label>
       <label class="slider">Gain <input type="range" id="gain" min="0.3" max="3" step="0.05"><span id="gainVal"></span></label>
-      <label class="slider" title="Größe von Puppe oder Partner im Vergleich zum CT-Körper, für das Kamera-Tracking">Größe <input type="range" id="bodyScale" min="40" max="130" step="5" value="100"><span id="bodyScaleVal">100 %</span></label>
       <div class="buttons">
         <button id="freezeBtn">Freeze</button>
         <button id="calibBtn">Neutralstellung</button>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>Sonde verschieben (Webcam)</h2>
+      <p class="small">Marker hinten unten aufs Handy kleben (<a href="print.html" target="_blank">Marker drucken</a>). Laptop so stellen, dass die Webcam die Handyrückseite sieht.</p>
+      <button id="camBtn">Webcam starten</button>
+      <div id="camBox" hidden>
+        <video id="camVideo" playsinline muted hidden></video>
+        <canvas id="camPreview" class="cam-preview"></canvas>
+        <p class="small" id="camStatus">Starte Webcam …</p>
+      </div>
+      <label class="slider" title="Größe von Puppe oder Partner im Vergleich zum CT-Körper">Größe <input type="range" id="bodyScale" min="40" max="130" step="5" value="100"><span id="bodyScaleVal">100 %</span></label>
     </section>
 
     <section class="card">
@@ -65,18 +101,28 @@
       </div>
     </section>
 
+    <details class="card">
+      <summary>NFC-Tags</summary>
+      <p class="small">Diese Adressen mit einer NFC-App (z. B. „NFC Tools“) als URL auf Tags schreiben. Handy an den Tag halten: Fälle werden verdeckt geladen, Fenster-Tags wählen das Schallfenster. Das Handy muss vorher einmal gekoppelt gewesen sein.</p>
+      <ul class="tag-list" id="tagList"></ul>
+    </details>
+
     <details class="card help">
       <summary>Bedienung</summary>
       <p>Handy hochkant halten, die <b>Unterkante</b> ist die Schallkopffläche, der Bildschirm zeigt zu dir. Die linke Handykante ist die Markerseite (links im Bild).</p>
-      <p><b>Ansetzen:</b> Sonde in Standardlage auf das Schallfenster setzen und am Handy unter „Ansetzen“ das Fenster tippen. Ab dann folgt das Bild der Bewegung. Am Phantom genauso.</p>
-      <p><b>Kamera-Tracking:</b> <a href="print.html" target="_blank">Marker-Blätter drucken</a> (100 %, nicht skalieren). Ein Blatt aufrecht so hinstellen, dass die Handykamera es in der Startlage sieht. Ansetzen, dann folgt das Bild dem Verschieben. „Größe“ gleicht Puppe oder Partner an den CT-Körper an.</p>
+      <p><b>Kalibrieren:</b> Schallfenster hier am Rechner wählen, Sonde in Standardlage aufsetzen (Phantom, Partner oder in der Luft) und am Handy „Kalibrieren“ tippen. Ab dann folgt das Bild der Bewegung.</p>
+      <p><b>Verschieben:</b> <a href="print.html" target="_blank">Marker drucken</a> (100 %), hinten unten aufs Handy kleben, „Webcam starten“. Die Webcam muss die Rückseite des Handys sehen, also Laptop gegenüber auf die andere Seite der Liege stellen. „Größe“ gleicht Puppe oder Partner an den CT-Körper an.</p>
       <p>Standardlagen: RUQ/LUQ koronal in der Axillarlinie, Marker kranial. Subxiphoidal flach unter dem Xiphoid, Richtung linke Schulter, Marker rechts. Becken transversal suprapubisch, Marker rechts. Lunge sagittal 2. ICR medioklavikulär, Marker kranial.</p>
-      <p>Ohne Handy: Ziehen im Bild = Kippen und Fächern, mit Umschalttaste = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, Tasten 1–6 = Fenster, L/K/S = Schallkopf, F = Freeze, N = Neutralstellung.</p>
+      <p>Ohne Handy: Ziehen im Bild = Kippen und Fächern, mit Umschalttaste = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, Tasten 1–6 = Fenster, L/K/S = Schallkopf, F = Freeze, N = Neutralstellung, A = Anatomieansicht, T = Organe einfärben.</p>
     </details>
   </aside>
 </main>
 <script src="vendor/peerjs.min.js"></script>
 <script src="vendor/qrcode.js"></script>
+<script src="vendor/js-aruco2/cv.js"></script>
+<script src="vendor/js-aruco2/aruco.js"></script>
+<script src="vendor/js-aruco2/svd.js"></script>
+<script src="vendor/js-aruco2/posit1.js"></script>
 <script type="module" src="js/monitor.js"></script>
 </body>
 </html>

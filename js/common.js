@@ -26,11 +26,33 @@ export const FINDINGS = [
   { bit: 32, name: 'Pneumothorax links', win: 5 },
 ];
 
+// id taucht in NFC-Tag-Adressen auf (probe.html?s=<id>)
 export const SCENARIOS = [
-  { name: 'Normalbefund', cases: 0 },
-  { name: 'Hämoperitoneum', cases: 1 | 2 | 8 },
-  { name: 'Perikardtamponade', cases: 4 },
-  { name: 'Pneumothorax rechts', cases: 16 },
+  { id: 'normal', name: 'Normalbefund', cases: 0 },
+  { id: 'haemo', name: 'Hämoperitoneum', cases: 1 | 2 | 8 },
+  { id: 'tamponade', name: 'Perikardtamponade', cases: 4 },
+  { id: 'ptx', name: 'Pneumothorax rechts', cases: 16 },
+];
+
+// Gewebeklassen wie in tools/build_volume.py, mit Farbe für Anatomieansicht und Einfärbung.
+// tint: wird im Ultraschallbild eingefärbt (Bauchwand und Fett bleiben grau)
+export const TISSUES = [
+  { name: 'Luft', rgb: [0, 0, 0] },
+  { name: 'Lunge / Darmgas', rgb: [0.55, 0.75, 0.95] },
+  { name: 'Fett', rgb: [0.95, 0.85, 0.45] },
+  { name: 'Weichteil', rgb: [0.62, 0.58, 0.56] },
+  { name: 'Leber', rgb: [0.70, 0.30, 0.18], tint: true },
+  { name: 'Milz', rgb: [0.60, 0.25, 0.60], tint: true },
+  { name: 'Niere', rgb: [0.95, 0.55, 0.15], tint: true },
+  { name: 'Nierenbecken', rgb: [1.0, 0.85, 0.40], tint: true },
+  { name: 'Blut / Gefäße', rgb: [0.90, 0.10, 0.12], tint: true },
+  { name: 'Herzmuskel', rgb: [0.85, 0.35, 0.45], tint: true },
+  { name: 'Knochen', rgb: [0.95, 0.93, 0.85] },
+  { name: 'Darm', rgb: [0.45, 0.70, 0.30], tint: true },
+  { name: 'Flüssigkeit', rgb: [0.15, 0.55, 1.0], tint: true },
+  { name: 'Haut', rgb: [1.0, 0.75, 0.65] },
+  { name: 'Muskel', rgb: [0.70, 0.22, 0.22] },
+  { name: 'Knorpel', rgb: [0.45, 0.90, 0.90] },
 ];
 
 const D2R = Math.PI / 180;
