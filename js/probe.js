@@ -90,7 +90,8 @@ function button(label, onClick, data = {}) {
 }
 
 for (const [key, p] of Object.entries(PROBES)) $('probeButtons').append(button(p.name, () => send({ t: 'probe', v: key }), { key }));
-WINDOWS.forEach((w, i) => $('winButtons').append(button(w.name, () => send({ t: 'window', v: i }), { i })));
+// Ansetzen: Fenster wählen und die aktuelle Haltung als Standardlage übernehmen (auch am Phantom)
+WINDOWS.forEach((w, i) => $('winButtons').append(button(w.name, () => send({ t: 'anchor', v: i }), { i })));
 for (const b of document.querySelectorAll('[data-cmd]')) {
   b.addEventListener('click', () => send({ t: b.dataset.cmd, d: +b.dataset.d || 0 }));
 }

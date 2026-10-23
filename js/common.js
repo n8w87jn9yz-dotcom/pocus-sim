@@ -6,13 +6,14 @@ export const PROBES = {
   phased: { id: 2, name: 'Sektor', mhz: 2.5, min: 6, max: 24, def: 16 },
 };
 
+// vol/key verweisen auf data/<vol>/meta.json -> windows[key]
 export const WINDOWS = [
-  { name: 'RUQ (Morison)', hint: 'convex' },
-  { name: 'LUQ (splenorenal)', hint: 'convex' },
-  { name: 'Subxiphoidal', hint: 'phased' },
-  { name: 'Becken (suprapubisch)', hint: 'convex' },
-  { name: 'Lunge rechts', hint: 'linear' },
-  { name: 'Lunge links', hint: 'linear' },
+  { name: 'RUQ (Morison)', hint: 'convex', vol: 'abdomen', key: 'ruq' },
+  { name: 'LUQ (splenorenal)', hint: 'convex', vol: 'abdomen', key: 'luq' },
+  { name: 'Subxiphoidal', hint: 'phased', vol: 'thorax', key: 'subxiphoid' },
+  { name: 'Becken (suprapubisch)', hint: 'convex', vol: 'abdomen', key: 'pelvis' },
+  { name: 'Lunge rechts', hint: 'linear', vol: 'thorax', key: 'lung_r' },
+  { name: 'Lunge links', hint: 'linear', vol: 'thorax', key: 'lung_l' },
 ];
 
 // Bit pro Befund, passt zu uCase im Shader
