@@ -1,5 +1,6 @@
-// Halte-Bilder im Röntgen-Look: Rumpf aus dem CT mit angedeutetem Kopf, Schultern und Hüften, Skelett zart,
-// nur das Zielorgan leuchtet, Sonde in Kontrastfarbe an der Standardlage aus meta.json, Schallebene angedeutet.
+// Halte-Bilder im Atlas-Look: ganzer Mensch als glasig-blaue Hülle (MakeHuman-Grundmodell, CC0, tools/human),
+// auf den CT-Rumpf eingepasst; Zielorgan in natürlicher Farbe, Gefäße fein rot, Sonde orange an der Standardlage
+// aus meta.json, Schallebene angedeutet.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from '../vendor/three/addons/libs/meshopt_decoder.module.js';
@@ -8,7 +9,6 @@ import { probeMesh, fanShape } from '../js/anatomy3d.js';
 
 // Zielorgane je Fenster; clip begrenzt auf einen Teil des Modells (Harnblase hängt mit der Gallenblase zusammen,
 // die Lunge ist ein Modell für beide Seiten). Grenzen relativ zur Sondenposition in mm.
-const BONES = ['ribs', 'spine', 'sternum', 'pelvis'];
 const TARGET = {
   ruq: { keys: ['liver', 'kidney'], clip: { x: [-160, 100] } },
   luq: { keys: ['spleen', 'kidney'], clip: { x: [-100, 160] } },
@@ -44,11 +44,11 @@ function holo(color, base, rim, power = 2.5, { min = [-1e5, -1e5, -1e5], max = [
 
 // Körperhülle: erst nur Tiefe schreiben, dann nur die vorderste Fläche als Fresnel-Glühen zeichnen.
 // So verschmelzen überlappende Teile (Rumpf, Hals, Kopf) zu einer glatten Silhouette ohne innere Linien.
-const SKIN = 0x2a86ff;
+const SKIN = 0x3a8cff;
 function shell(geo, opts = {}) {
   const depth = holo(SKIN, 0, 0, 1, opts);
   Object.assign(depth, { colorWrite: false, depthWrite: true, transparent: false, blending: THREE.NormalBlending });
-  const glow = holo(SKIN, 0.03, 0.95, 2.3, opts);
+  const glow = holo(SKIN, 0.11, 1.15, 2.0, opts);
   glow.depthFunc = THREE.LessEqualDepth;
   const g = new THREE.Group();
   const d = new THREE.Mesh(geo, depth), c = new THREE.Mesh(geo, glow);
@@ -57,66 +57,60 @@ function shell(geo, opts = {}) {
   return g;
 }
 
-// Kopf aus einer verformten Kugel: Hinterkopf, Stirn, Nase, Kinn, damit vorn auf einen Blick klar ist
-function headGeometry() {
-  const geo = new THREE.SphereGeometry(1, 96, 64);
-  const p = geo.attributes.position, v = new THREE.Vector3();
-  const bump = (n, dir, w, a) => a * Math.exp(-(1 - n.dot(dir)) / w);
-  const nose = new THREE.Vector3(0, 0.97, -0.25).normalize(), chin = new THREE.Vector3(0, 0.6, -0.8).normalize();
-  const brow = new THREE.Vector3(0, 0.8, 0.35).normalize(), back = new THREE.Vector3(0, -0.6, 0.5).normalize();
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    const n = v.clone().normalize();
-    let r = 1 + bump(n, nose, 0.006, 0.28) + bump(n, chin, 0.03, 0.1) + bump(n, brow, 0.04, 0.05) + bump(n, back, 0.15, 0.08);
-    if (n.z < -0.2) r *= 1 - 0.18 * (-n.z - 0.2) * (1 - Math.abs(n.y)) ;   // Kiefer schmaler
-    v.copy(n).multiplyScalar(r);
-    p.setXYZ(i, v.x * 76, v.y * 92, v.z * 112);
-  }
-  geo.computeVertexNormals();
+// Menschmodell laden (tools/human/body.bin, siehe convert_makehuman.py): Einheit dm, x rechts, y vorn, z oben
+async function loadHuman() {
+  const buf = await (await fetch('human/body.bin')).arrayBuffer();
+  const [nV, nI] = new Uint32Array(buf, 0, 2);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buf, 8, nV * 3).slice(), 3));
+  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(buf, 8 + nV * 12, nI).slice(), 1));
   return geo;
 }
 
-// Angedeuteter Körper um den CT-Rumpf: Rumpf außerhalb des CT, Hals, Kopf mit Gesicht nach vorn,
-// Schultern mit kurz auslaufenden Oberarmen, Ansatz der Oberschenkel. zHip = Hüftgelenk, zJug = Drosselgrube.
-function body(c, W, T, zHip, zJug, ctZ) {
-  const g = new THREE.Group();
-  const prof = [[0, zHip - 120], [0.78, zHip - 110], [0.95, zHip - 40], [0.97, zHip + 70], [0.88, zHip + 210],
-    [0.95, zHip + 330], [1.0, zJug - 120], [1.04, zJug - 50], [0.9, zJug - 5], [0.45, zJug + 30], [0.3, zJug + 40], [0, zJug + 42]];
-  const torso = new THREE.LatheGeometry(prof.map(([r, z]) => new THREE.Vector2(r, z)), 64);
-  torso.rotateX(Math.PI / 2);
-  torso.scale(W / 2, T / 2, 1);
-  torso.translate(c.x, c.y, 0);
-  // CT-Bereich aussparen: unterer und oberer Teil getrennt; unten zu den Beinen hin ausblenden
-  const hipC = [c.x, c.y, zHip];
-  g.add(shell(torso, { max: [1e5, 1e5, ctZ[0] + 15], fade: { c: [c.x, c.y, zHip + 150], r: [180, 420] } }));
-  g.add(shell(torso, { min: [-1e5, -1e5, ctZ[1] - 15] }));
-  const y0 = c.y - 0.06 * T;
-  const neck = new THREE.CylinderGeometry(52, 58, 150, 40, 1, true).rotateX(Math.PI / 2).translate(c.x, y0, zJug + 55);
-  g.add(shell(neck));
-  g.add(shell(headGeometry().translate(c.x, y0 + 12, zJug + 225)));
-  const limb = (a, b, ra, rb, fade) => {
-    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
-    const geo = new THREE.CylinderGeometry(rb, ra, A.distanceTo(B), 32, 1, true);
-    geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize()));
-    geo.translate(...A.clone().add(B).multiplyScalar(0.5).toArray());
-    g.add(shell(geo, { fade }));
-    g.add(shell(new THREE.SphereGeometry(ra, 32, 20).translate(A.x, A.y, A.z), { fade }));
-  };
-  for (const s of [1, -1]) {
-    const sh = [c.x + s * (W / 2 - 10), y0, zJug - 55];
-    limb(sh, [c.x + s * (W / 2 + 120), y0 - 10, zJug - 330], 52, 42, { c: sh, r: [90, 260] });   // Oberarm, leicht abgespreizt
-    const hip = [c.x + s * 0.24 * W, c.y, zHip - 30];
-    limb(hip, [c.x + s * 0.23 * W, c.y + 10, zHip - 460], 92, 60, { c: hipC, r: [120, 330] });   // Oberschenkel
+// Modell auf den CT-Rumpf einpassen: Drosselgrube und Hüftgelenk nach Körperproportionen (82 % und 53 % der
+// Körperhöhe), Breite und Tiefe an der Taille an das CT angleichen
+function fitHuman(src, c, W, T, zHip, zJug) {
+  const geo = src.clone();
+  geo.computeBoundingBox();
+  const { min, max } = geo.boundingBox, H = max.z - min.z;
+  const zj = min.z + 0.818 * H, zh = min.z + 0.53 * H, zw = min.z + 0.62 * H;
+  const p = geo.attributes.position;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let i = 0; i < p.count; i++) {
+    if (Math.abs(p.getZ(i) - zw) > 0.15 || Math.abs(p.getX(i)) > 2.2) continue;   // Taille ohne Arme
+    x0 = Math.min(x0, p.getX(i)); x1 = Math.max(x1, p.getX(i)); y0 = Math.min(y0, p.getY(i)); y1 = Math.max(y1, p.getY(i));
   }
-  return g;
+  const s = (zJug - zHip) / (zj - zh);
+  const clamp = v => Math.min(1.25, Math.max(0.8, v));
+  const sx = clamp(W / ((x1 - x0) * s)), sy = clamp(T / ((y1 - y0) * s));
+  geo.translate(-(x0 + x1) / 2, -(y0 + y1) / 2, -zh);
+  geo.scale(s * sx, s * sy, s);
+  geo.translate(c.x, c.y, zHip);
+  geo.computeVertexNormals();
+  geo.computeBoundingBox();
+  return geo;
+}
+
+// Organe in natürlicher Farbe, beschnitten auf den Bereich lo…hi
+const ORGAN_COLOR = { liver: 0x9b3b2b, kidney: 0xb5563c, spleen: 0x7c2c4c, heart: 0xc2463e, fluid: 0xe2cf72, lung: 0xe7a2a0 };
+function organMaterial(k, lo, hi) {
+  const planes = [0, 1, 2].flatMap(i => {
+    const n = new THREE.Vector3().setComponent(i, 1);
+    return [new THREE.Plane(n.clone(), -lo[i]), new THREE.Plane(n.clone().negate(), hi[i])];
+  }).filter(pl => Math.abs(pl.constant) < 1e4);
+  return new THREE.MeshStandardMaterial({
+    color: ORGAN_COLOR[k], emissive: ORGAN_COLOR[k], emissiveIntensity: 0.25, roughness: 0.45,
+    transparent: k === 'lung', opacity: k === 'lung' ? 0.75 : 1, depthTest: false, clippingPlanes: planes,
+  });
 }
 
 const canvas = document.getElementById('c');
-canvas.width = 640; canvas.height = 640;
+canvas.width = 480; canvas.height = 720;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(1);
+renderer.localClippingEnabled = true;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
+scene.background = new THREE.Color(0x05080d);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 1.2));
 const sun = new THREE.DirectionalLight(0xffffff, 2.0);
 scene.add(sun);
@@ -125,6 +119,7 @@ camera.up.set(0, 0, 1);   // Kopf oben im Bild, wie im Atlas
 
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const models = {}, metas = {};
+let human = null;
 async function model(name) {
   if (!models[name]) {
     models[name] = (await loader.loadAsync(`../data/${name}/anatomy.glb`)).scene;
@@ -140,54 +135,43 @@ async function render(win) {
   const origin = new THREE.Vector3(...w.origin);
   const lo = [-1e5, -1e5, -1e5], hi = [1e5, 1e5, 1e5];
   ['x', 'y', 'z'].forEach((a, i) => { if (t.clip?.[a]) { lo[i] = origin.getComponent(i) + t.clip[a][0]; hi[i] = origin.getComponent(i) + t.clip[a][1]; } });
-  const skinGeos = [];   // Haut-Meshes des CT, werden als Hülle neu gezeichnet
   root.traverse(o => {
     if (!o.isMesh) return;
     const k = o.name.replace(/_\d+$/, '');
     o.visible = true;
     if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
-    if (k === 'skin') { o.visible = false; skinGeos.push(o); }
-    else if (BONES.includes(k)) {
-      o.material = holo(0x5aa8ff, 0.015, 0.32, 1.8);   // Skelett nur zart zur Orientierung
-      o.material.depthTest = false;
-      o.renderOrder = 2;
+    if (k === 'artery' || k === 'vein') {
+      o.material = new THREE.MeshBasicMaterial({ color: k === 'artery' ? 0xe0383a : 0xb02a50, transparent: true, opacity: 0.3, depthTest: false });
+      o.renderOrder = 2;   // Gefäße fein im Hintergrund wie im Atlas
     } else if (t.keys.includes(k)) {
-      o.material = holo(0xa6ecff, k === 'lung' ? 0.08 : 0.22, 1.0, 1.3, { min: lo, max: hi });
-      o.material.depthTest = false;   // Zielorgan leuchtet durch die Haut
-      o.renderOrder = 3;
+      o.material = organMaterial(k, lo, hi);
+      o.renderOrder = 3;   // Zielorgan scheint durch die Haut
     } else o.visible = false;
   });
   scene.add(root);
   root.updateMatrixWorld(true);
 
-  // Körper ergänzen: Landmarken aus dem CT (Hüfte am Beckenboden, Drosselgrube am Brustbein), die fehlende per Proportion
+  // Mensch einpassen: Landmarken aus dem CT (Hüfte am Beckenboden, Drosselgrube am Brustbein), die fehlende per Proportion
   const meshBox = key => { const b = new THREE.Box3(); root.traverse(o => { if (o.isMesh && o.name.startsWith(key)) b.expandByObject(o); }); return b; };
   const skinBox = meshBox('skin');
   const sc = skinBox.getCenter(new THREE.Vector3()), ss = skinBox.getSize(new THREE.Vector3());
   let zHip, zJug;
   if (win.vol === 'abdomen') { zHip = meshBox('pelvis').min.z + 40; zJug = zHip + 520; }
   else { zJug = meshBox('sternum').max.z; zHip = zJug - 520; }
-  const fig = body(sc, ss.x, ss.y, zHip, zJug, [skinBox.min.z, skinBox.max.z]);
-  for (const m of skinGeos) {
-    // Geometrie ist quantisiert (Meshopt), daher Weltlage als Matrix übernehmen statt umzurechnen
-    const sh = shell(m.geometry);
-    sh.matrixAutoUpdate = false;
-    sh.matrix.copy(m.matrixWorld);
-    fig.add(sh);
-  }
+  human ||= await loadHuman();
+  const humanGeo = fitHuman(human, sc, ss.x, ss.y, zHip, zJug);
+  const fig = shell(humanGeo);
   scene.add(fig);
 
   // Sonde an der Haut: von außen entlang der Schallrichtung bis zur Haut
   const L = new THREE.Vector3(...w.L), D = new THREE.Vector3(...w.D), E = new THREE.Vector3(...w.E);
-  const skin = [];
-  root.traverse(o => { if (o.isMesh && o.name.startsWith('skin')) skin.push(o); });
-  const ray = new THREE.Raycaster(origin.clone().addScaledVector(D, -200), D.clone());
-  skin.forEach(m => { m.visible = true; });
-  const hit = ray.intersectObjects(skin, false)[0];
-  skin.forEach(m => { m.visible = false; });
+  const ray = new THREE.Raycaster(origin.clone().addScaledVector(D, -300), D.clone());
+  const skinHit = new THREE.Mesh(humanGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  const hit = ray.intersectObject(skinHit, false)[0];
   const o = hit ? hit.point : origin;
 
-  const basis = new THREE.Matrix4().makeBasis(L, D, E).setPosition(o);
+  // Sonde und Fächer anderthalbfach, damit sie im Ganzkörperbild gut zu sehen sind
+  const basis = new THREE.Matrix4().makeBasis(L, D, E).multiply(new THREE.Matrix4().makeScale(1.5, 1.5, 1.5)).setPosition(o);
   const probe = probeMesh(win.hint);
   probe.traverse(m => {
     if (!m.isMesh) return;
@@ -218,21 +202,23 @@ async function render(win) {
   scene.add(fan);
 
   // Kamera schräg von vorn: Flanken von der Sondenseite, sonst nahe der Ebenennormalen, damit der Fächer sichtbar ist.
-  // Bildausschnitt vom Scheitel bis zu den Hüften
+  // Ganzer Mensch im Bild
   let dir;
   if (win.key === 'ruq' || win.key === 'luq') {
     dir = D.clone().negate().setZ(0).multiplyScalar(0.35).add(new THREE.Vector3(0, 1, 0.3)).normalize();   // Sonde ragt seitlich heraus, im Profil sichtbar
-  } else if (win.key === 'pelvis') {
-    dir = new THREE.Vector3(0.55, 1, 0.35).normalize();
+  } else if (win.key === 'pelvis' || win.key === 'subxiphoid') {
+    dir = new THREE.Vector3(0.45, 1, 0.12).normalize();
   } else {
     const front = new THREE.Vector3(0, 1, 0.2);
     const n = E.clone().multiplyScalar(Math.sign(E.dot(front)) || 1);
     dir = front.normalize().multiplyScalar(1.2).add(n).normalize();
   }
-  const zTop = zJug + 345, zBot = zHip - 140;
+  const hb = humanGeo.boundingBox;
+  const zTop = hb.max.z + 20, zBot = hb.min.z - 20;
   const target = new THREE.Vector3(sc.x, sc.y, (zTop + zBot) / 2);
   const fov = THREE.MathUtils.degToRad(camera.fov);
-  camera.position.copy(target).addScaledVector(dir, (zTop - zBot) * 0.52 / Math.tan(fov / 2) + ss.y / 2);
+  const fitW = (hb.max.x - hb.min.x) / 2 / camera.aspect;
+  camera.position.copy(target).addScaledVector(dir, Math.max((zTop - zBot) / 2, fitW) * 1.1 / Math.tan(fov / 2) + ss.y / 2);
   camera.lookAt(target);
   sun.position.copy(camera.position);
 

@@ -64,11 +64,13 @@ button.active { background: var(--accent); color: #04121f; border-color: var(--a
 #us { image-rendering: auto; }
 #overlay { cursor: grab; touch-action: none; }
 .loading[hidden] { display: none; }
-.hold-tip { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); z-index: 5;
+.hold-tip { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); width: min(600px, calc(100% - 32px)); z-index: 5;
+  display: grid; grid-template-columns: minmax(0, 230px) 1fr; column-gap: 14px;
   background: rgba(18, 26, 35, 0.96); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
 .hold-tip[hidden] { display: none; }
-.hold-tip h3 { margin: 0 0 6px; font-size: 15px; }
-.hold-tip img { display: block; width: 100%; max-height: 42vh; object-fit: contain; background: #000; border-radius: 6px; margin-bottom: 8px; }
+.hold-tip h3 { margin: 0 0 6px; font-size: 15px; grid-column: 1 / -1; }
+.hold-tip > :not(h3):not(img) { grid-column: 2; }
+.hold-tip img { grid-column: 1; grid-row: 2 / span 4; display: block; width: 100%; max-height: 60vh; object-fit: contain; background: #05080d; border-radius: 6px; }
 .hold-tip ul { margin: 0 0 8px; padding-left: 18px; line-height: 1.45; }
 .hold-tip .buttons { margin-top: 8px; }
 .loading { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--muted); pointer-events: none; }
