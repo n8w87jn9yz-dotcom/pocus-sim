@@ -571,7 +571,7 @@ function onData(m) {
     case 'probe': if (m.v in PROBES) setProbe(m.v); break;
     case 'calib': calibrate(); showNote('Kalibriert'); $('holdTip').hidden = true; break;
     case 'tag': applyTag(m); break;
-    case 'swipe': if (!state.frozen) slideProbe(-m.d[0] * SWIPE_MM, -m.d[1] * SWIPE_MM); break;   // Sonde am Handy steht kopfüber
+    case 'swipe': if (!state.frozen) slideProbe(m.d[0] * SWIPE_MM, -m.d[1] * SWIPE_MM); break;   // Sonde am Handy steht kopfüber
     case 'hello': sendState(); break;
   }
 }
@@ -647,8 +647,8 @@ function onMouseMove(e) {
   const a = mouseProbe.turn * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
   const dx = c * e.movementX - s * e.movementY, dy = s * e.movementX + c * e.movementY;
   if (mouseProbe.measure) mouseProbe.measure.d += Math.hypot(dx, dy);
-  // Maus nach rechts (von dir aus gesehen) = Sonde nach rechts, Maus zu dir = Elevation zum Bildschirm hin
-  if (!state.frozen) slideProbe(dx / mouseProbe.perMm, dy / mouseProbe.perMm);
+  // Maus nach rechts = Sonde zur rechten Handykante (weg vom Marker), Maus zu dir = Elevation zum Bildschirm hin
+  if (!state.frozen) slideProbe(-dx / mouseProbe.perMm, -dy / mouseProbe.perMm);
   updateMouseStatus();
 }
 

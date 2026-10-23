@@ -29,7 +29,7 @@ Das Handy braucht **HTTPS**, sonst liefert der Browser keine Sensordaten. Am ein
 
 1. Am Laptop die Pages-Adresse öffnen.
 2. QR-Code mit dem Handy scannen (iPhone oder Android).
-3. Handy kopfüber halten: Oberkante = Schallkopffläche (zeigt auf den Patienten), Bildschirm zu dir, die rechte Handykante (von dir aus links) = Marker. Das Handy zeigt das genauso als Schallkopf-Bild.
+3. Handy kopfüber halten: Oberkante = Schallkopffläche (zeigt auf den Patienten), linke Handykante = Marker (links im Bild). Das Handy zeigt das genauso als Schallkopf-Bild.
 4. Fenster am Laptop wählen, Sonde in Standardlage aufsetzen (Phantom, Partner oder in der Luft) und am Handy „Kalibrieren“ tippen.
    Der erste Tipp startet die Sensoren, das iPhone fragt dabei nach Erlaubnis.
 

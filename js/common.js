@@ -119,11 +119,11 @@ export function rotX(a) { const c = Math.cos(a), s = Math.sin(a); return [[1, 0,
 export function rotY(a) { const c = Math.cos(a), s = Math.sin(a); return [[c, 0, s], [0, 1, 0], [-s, 0, c]]; }
 export function rotZ(a) { const c = Math.cos(a), s = Math.sin(a); return [[c, -s, 0], [s, c, 0], [0, 0, 1]]; }
 
-// Handy hochkant, Oberkante = Schallkopffläche, Bildschirm zum Untersucher, Marker an der rechten Handykante.
-// Geräteachsen: -x = lateral, +y = Tiefe, z = Elevation. Szene: y zeigt in die Tiefe.
+// Handy kopfüber, Oberkante = Schallkopffläche, linke Handykante = Marker (links im Bild).
+// Geräteachsen: x = lateral, +y = Tiefe, -z = Elevation. Szene: y zeigt in die Tiefe.
 // Aus der Kalibrierlage Rn und der aktuellen Lage Rc wird die Sondenlage in der Szene.
 export function probeMatrix(Rn, Rc) {
   const Rrel = matMul(matT(Rn), Rc);
-  const s = [-1, 1, 1];
+  const s = [1, 1, -1];
   return Rrel.map((r, i) => r.map((v, j) => s[i] * v * s[j]));
 }

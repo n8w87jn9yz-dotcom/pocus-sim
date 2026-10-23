@@ -81,9 +81,9 @@ function showProbe(key) {
     `M78 84 H122 Q130 84 132 94 L136 184 Q140 250 ${r} 300 L${r} 354 L${l} 354 L${l} 300 Q60 250 64 184 L68 94 Q70 84 78 84 Z`);
   $('probeGrip').setAttribute('d', 'M74 100 H126 L129 148 Q100 156 71 148 Z');
   $('probeLens').setAttribute('d', lens);
-  $('probeMarker').setAttribute('transform', `translate(${l - 10} 318)`);
-  // Marker liegt nach der Drehung an der rechten Kante bei y ≈ 60…82
-  $('markerLabel').setAttribute('x', r - 4);
+  $('probeMarker').setAttribute('transform', `translate(${r + 1} 318)`);   // nach der Drehung links
+  // Marker liegt nach der Drehung an der linken Kante bei y ≈ 60…82
+  $('markerLabel').setAttribute('x', l + 4);
   $('markerLabel').setAttribute('y', 75);
   $('probeName').textContent = `${PROBES[key].name} · ${PROBES[key].mhz} MHz`;
   for (const b of document.querySelectorAll('#probeTypes button')) b.classList.toggle('active', b.dataset.key === key);

@@ -10,7 +10,7 @@
 <body class="probe">
 <p class="face-hint">▲ Schallfläche: Oberkante des Handys auf den Patienten ▲</p>
 
-<!-- Das Handy ist der Schallkopf, kopfüber gehalten: Oberkante = Schallfläche, rechte Kante = Marker.
+<!-- Das Handy ist der Schallkopf, kopfüber gehalten: Oberkante = Schallfläche, linke Kante = Marker.
      Gezeichnet wird die Sonde mit dem Kopf nach unten und dann um 180° gedreht, die Texte bleiben lesbar.
      Der Einschaltknopf kalibriert, Wischen auf dem Gehäuse verschiebt die Sonde. -->
 <svg id="probeView" class="probe-view" viewBox="0 0 200 400" preserveAspectRatio="xMidYMin meet" aria-label="Schallkopf">
@@ -44,7 +44,7 @@
     <circle cx="100" cy="204" r="28" fill="url(#btn)" stroke="#0d3b5a" stroke-width="2"/>
     <path d="M100 187 v16 M90 194 a14 14 0 1 0 20 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
   </g>
-  <text id="markerLabel" class="probe-label dark" text-anchor="end">Marker ▶</text>
+  <text id="markerLabel" class="probe-label dark" text-anchor="start">◀ Marker</text>
   <text x="100" y="124" class="probe-label dark tiny" text-anchor="middle">Wischen = schieben</text>
   <text x="100" y="166" class="probe-label strong dark" text-anchor="middle" id="calibText">Kalibrieren</text>
 </svg>
