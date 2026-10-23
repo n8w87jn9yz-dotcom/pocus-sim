@@ -1,6 +1,6 @@
 import { VERT, FRAG } from './shader.js';
 import {
-  PROBES, WINDOWS, FINDINGS, SCENARIOS, TISSUES,
+  PROBES, WINDOWS, FINDINGS, SCENARIOS, TISSUES, SUBLABELS,
   matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
 } from './common.js';
 import { WebcamTracker } from './webcam.js';
@@ -106,11 +106,29 @@ function currentVolume() {
   return null;
 }
 
-function classAt(vol, p) {
+function voxelIndex(vol, p) {
   const [dx, dy, dz] = vol.meta.dims, s = vol.meta.spacing;
   const x = Math.floor(p[0] / s), y = Math.floor(p[1] / s), z = Math.floor(p[2] / s);
-  if (x < 0 || y < 0 || z < 0 || x >= dx || y >= dy || z >= dz) return 0;
-  return vol.data[4 * (x + dx * (y + dy * z))];
+  if (x < 0 || y < 0 || z < 0 || x >= dx || y >= dy || z >= dz) return -1;
+  return 4 * (x + dx * (y + dy * z));
+}
+
+function classAt(vol, p) {
+  const i = voxelIndex(vol, p);
+  return i < 0 ? 0 : vol.data[i];
+}
+
+// Beschriftung eines Punkts: Gefäße, Herzhöhlen und Blasen mit Namen, Befunde als Flüssigkeit
+const LABELED = TISSUES.map((t, i) => t.tint || i === 1 || i === 10);
+function labelAt(vol, p) {
+  const i = voxelIndex(vol, p);
+  if (i < 0) return null;
+  const d = vol.data, c = d[i], a = d[i + 3], sub = a >> 4;
+  if ((a & 15 & state.cases) && c !== 10) return (a & 4 & state.cases) ? 'Perikarderguss' : 'Freie Flüssigkeit';
+  if (c === 9) return d[i + 2] * 0.5 > 6 ? (SUBLABELS[sub] || 'Herzhöhle') : 'Herzmuskel';
+  if (sub && (c === 8 || c === 12)) return SUBLABELS[sub];
+  if (c === 1) return WINDOWS[state.win].vol === 'thorax' ? 'Lunge' : 'Darmgas';
+  return LABELED[c] ? TISSUES[c].name : null;
 }
 
 // Sondenursprung: Fensterpunkt plus Verschiebung, dann zurück auf die Haut gelegt
@@ -194,7 +212,6 @@ function inFan(x, y) {
 }
 
 // Grobes Raster über die Schnittebene: wo liegt welches Organ? Für die Beschriftung.
-const LABELED = TISSUES.map((t, i) => t.tint || i === 1 || i === 10);
 function sampleLabels(vol, M, o) {
   const top = topOffset(), sc = usCanvas.height / (state.depth + top);
   const halfW = usCanvas.width / 2 / sc;
@@ -210,8 +227,8 @@ function sampleLabels(vol, M, o) {
     for (let ix = 0; ix < NX; ix++) {
       const x = ((ix + 0.5) / NX * 2 - 1) * halfW;
       const p = o.map((v, i) => v + (Lc[i] * x + Dc[i] * y) * 10 + Dc[i] * off);
-      const c = classAt(vol, p);
-      if (!LABELED[c]) continue;
+      const c = labelAt(vol, p);
+      if (!c) continue;
       for (const m of inFan(x, y) ? [all, fan] : [all]) {
         if (!m.has(c)) m.set(c, []);
         m.get(c).push([x, y]);
@@ -228,18 +245,19 @@ function drawLabels(ctx, map, W, H) {
   const placed = [];
   // große Organe zuerst, Beschriftungen dürfen sich nicht überdecken
   for (const [c, pts] of [...map].sort((a, b) => b[1].length - a[1].length)) {
-    if (pts.length < 6) continue;
+    if (pts.length < 3) continue;
     // Beschriftung an den Rasterpunkt der Klasse, der ihrem Schwerpunkt am nächsten liegt
     const m = pts.reduce((a, p) => [a[0] + p[0] / pts.length, a[1] + p[1] / pts.length], [0, 0]);
     const p = pts.reduce((a, b) => (Math.hypot(b[0] - m[0], b[1] - m[1]) < Math.hypot(a[0] - m[0], a[1] - m[1]) ? b : a));
-    const x = W / 2 + p[0] * sc, y = (p[1] + top) * sc;
+    const half = ctx.measureText(c).width / 2 + 4 * dpr;
+    const x = Math.max(half, Math.min(W - half - 30 * dpr, W / 2 + p[0] * sc)), y = (p[1] + top) * sc;
     if (placed.some(([a, b]) => Math.abs(a - x) < 80 * dpr && Math.abs(b - y) < 18 * dpr)) continue;
     placed.push([x, y]);
     ctx.lineWidth = 3 * dpr;
     ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-    ctx.strokeText(TISSUES[c].name, x, y);
+    ctx.strokeText(c, x, y);
     ctx.fillStyle = '#fff';
-    ctx.fillText(TISSUES[c].name, x, y);
+    ctx.fillText(c, x, y);
   }
   ctx.textAlign = 'start';
 }
@@ -300,13 +318,19 @@ function drawOverlay(M) {
     `${state.trackInfo ? `<span>${state.trackInfo}</span>` : ''}${state.note ? `<span class="ok">${state.note}</span>` : ''}<span class="${pose.source === 'phone' ? 'ok' : ''}">${pose.source === 'phone' ? 'Handy' : 'Maus'}</span>`;
 }
 
+function quatAngle(a, b) {
+  const d = Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
+  return 2 * Math.acos(Math.min(1, d));
+}
+
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (!state.frozen) {
     time += dt;
-    if (pose.target) pose.q = pose.q ? qNlerp(pose.q, pose.target, 0.35) : pose.target;
+    // Totzone gegen Sensorrauschen: ruhig gehaltene Sonde gibt ein ruhiges Bild
+    if (pose.target && (!pose.q || quatAngle(pose.q, pose.target) > 0.004)) pose.q = pose.q ? qNlerp(pose.q, pose.target, 0.35) : pose.target;
     lastM = currentMatrix();
   }
   requestAnimationFrame(loop);

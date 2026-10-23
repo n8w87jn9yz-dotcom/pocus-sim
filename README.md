@@ -65,7 +65,8 @@ python tools/build_volume.py --ct ct.nii.gz --seg seg.nii.gz --name thorax --win
 - Das Gyro misst nur die Ausrichtung. Die Position kommt aus dem Kalibrieren am Fenster plus Webcam-Tracking (oder Pfeiltasten).
 - Webcam-Tracking: in der Bildebene der Webcam grob 0,5 cm genau, auf die Webcam zu oder von ihr weg ungenauer (1–2 cm).
   Der Marker muss im Bild bleiben, sonst bleibt die Position stehen. Noch nicht mit echtem Gerät getestet.
-- Die Herzkammern sind im nativen CT nicht sichtbar. Ihre Wände werden aus der echten Herzkontur abgeleitet.
+- Die Herzkammern sind im nativen CT nicht sichtbar. Wände, Kammern und Vorhöfe werden aus der echten Herzkontur
+  abgeleitet (Hauptachsen, Septum, Klappenebene) und sind nur grob anatomisch. Gefäße sind aus der Segmentierung benannt.
 - Freie Flüssigkeit und Perikarderguss sind in die echte Anatomie eingerechnet, nicht aus Patientendaten.
 - Auflösung 1,5 mm (Thorax) bzw. 3 mm Ursprungsdaten (Abdomen). Medizinisch nicht validiert.
 - Die Kopplung nutzt den öffentlichen PeerJS-Server (0.peerjs.com).
