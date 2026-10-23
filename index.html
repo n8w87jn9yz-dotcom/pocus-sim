@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>POCUS-Simulator</title>
 <link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
 </head>
 <body class="monitor">
 <main class="layout">
@@ -17,15 +18,11 @@
       </div>
       <div class="anat-wrap" id="anatWrap" hidden>
         <canvas id="anat"></canvas>
-        <svg id="bodyView" class="body-view" viewBox="0 0 200 260" hidden aria-label="Sondenposition am Körper">
-          <path d="M70 10 h60 q6 0 8 6 l6 28 q34 6 40 30 l-6 70 q-4 12 -14 12 l-6 90 q-2 8 -10 8 h-96 q-8 0 -10 -8 l-6 -90 q-10 0 -14 -12 l-6 -70 q6 -24 40 -30 l6 -28 q2 -6 8 -6z" class="torso"/>
-          <line x1="100" y1="44" x2="100" y2="104" class="sternum"/>
-          <path d="M62 112 q38 22 76 0" class="costal"/>
-          <text x="6" y="252" class="side">rechts</text><text x="194" y="252" class="side" text-anchor="end">links</text>
-          <line id="pmBeam" class="pm-beam"/>
-          <line id="pmLine" class="pm-line"/>
-          <circle id="pmDot" r="3" class="pm-dot"/>
-        </svg>
+        <canvas id="anat3d" hidden></canvas>
+        <div class="anat3d-tools" id="anat3dTools" hidden>
+          <label class="check"><input type="checkbox" id="fanToggle" checked> Schallebene</label>
+          <button id="viewReset" title="Kamera wieder der Sonde folgen lassen">Ansicht zurücksetzen</button>
+        </div>
         <p class="anat-title" id="anatTitle"></p>
       </div>
     </div>
@@ -52,7 +49,7 @@
       <div class="buttons" id="anatButtons">
         <button data-mode="off">Nur Ultraschall</button>
         <button data-mode="cut">+ Anatomie im Schnitt</button>
-        <button data-mode="body">+ Sondenposition</button>
+        <button data-mode="body">+ 3D-Anatomie</button>
       </div>
       <label class="check"><input type="checkbox" id="tint"> Organe einfärben und beschriften</label>
     </section>

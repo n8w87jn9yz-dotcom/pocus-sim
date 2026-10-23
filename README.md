@@ -14,6 +14,7 @@ Reine statische Web-App ohne Build-Schritt.
 - `print.html`: Druckvorlage für den Handy-Marker
 - `js/common.js`: Schallköpfe, Fenster, Befunde, Rotationsmathematik
 - `tools/build_volume.py`: wandelt CT + Segmentierung in `data/<name>/` um
+- `tools/build_meshes.py`: baut daraus die 3D-Modelle `data/<name>/anatomy.glb` (`python tools/build_meshes.py --name thorax`)
 - `data/`: fertige Volumen, siehe [data/QUELLEN.md](data/QUELLEN.md)
 - `docs/architektur.md`: Architektur und Entscheidungen
 
@@ -43,7 +44,10 @@ aus beiden laufend geschätzt, nur die Verschiebung seit dem Kalibrieren wird ve
 
 ### Anatomie und Einfärbung
 „Anatomie im Schnitt“ zeigt rechts neben dem Bild dieselbe Schnittebene in Gewebefarben mit Beschriftung,
-„Sondenposition“ den Körper von vorn mit der Sonde. „Organe einfärben“ tönt Organe im Ultraschallbild leicht und beschriftet sie.
+„3D-Anatomie“ ein drehbares 3D-Modell des Körpers mit Sonde und mitbewegter Schallebene, auf der das Ultraschallbild
+liegt. Die Organe sind aus demselben CT berechnet wie das Bild und sitzen deshalb exakt dort, wo die Sonde schallt.
+Mit der Maus drehen (Ziehen), zoomen (Mausrad), verschieben (rechte Taste); über einem Organ erscheint sein Name.
+„Ansicht zurücksetzen“ lässt die Kamera wieder der Sonde folgen. „Organe einfärben“ tönt Organe im Ultraschallbild leicht und beschriftet sie.
 
 ### NFC-Tags
 Unter „NFC-Tags“ am Laptop stehen Adressen (`probe.html?s=haemo`, `probe.html?w=ruq` …). Mit einer NFC-App als URL auf Tags schreiben.

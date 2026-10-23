@@ -4,13 +4,14 @@ import {
   matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
 } from './common.js';
 import { WebcamTracker } from './webcam.js';
+import { Anatomy3D } from './anatomy3d.js';
 
 const state = {
   probe: 'convex', win: 0, depth: PROBES.convex.def, gain: 1.0,
   frozen: false, cases: 0, hidden: false,
   slide: [0, 0],
   track: null, trackInfo: '', bodyScale: 100,
-  anat: 'off', tint: false, note: '',
+  anat: 'off', tint: false, fan: true, note: '',
 };
 let tracker = null;
 const pose = { target: null, q: null, Rn: null, mouse: { rock: 0, fan: 0, rot: 0 }, source: 'mouse' };
@@ -19,6 +20,7 @@ let time = 0;
 
 const $ = id => document.getElementById(id);
 const usCanvas = $('us'), overlay = $('overlay'), anatCanvas = $('anat');
+const anat3d = new Anatomy3D($('anat3d'));
 
 // ---------- WebGL ----------
 const gl = usCanvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
@@ -155,8 +157,8 @@ function render() {
     ctx.drawImage(usCanvas, 0, 0, anatCanvas.width, anatCanvas.height);
     drawLabels(ctx, labels.all, anatCanvas.width, anatCanvas.height);
   }
-  if (state.anat === 'body') drawBody(w, M);
   drawPass(vol, M, o, DEBUG ? 1 : 0);
+  if (state.anat === 'body') draw3D(vol, M, o);
   drawOverlay(lastM);
   if (state.tint) drawLabels(overlay.getContext('2d'), labels.fan, overlay.width, overlay.height);
 }
@@ -244,22 +246,22 @@ function drawLabels(ctx, map, W, H) {
   ctx.textAlign = 'start';
 }
 
-// Körperansicht von vorn: Sonde als Strich mit Markerpunkt an der aktuellen Stelle
+// Schallfenster auf der Körperskizze im Bedienfeld
 const SPOTS = [[58, 128], [142, 120], [100, 112], [100, 218], [74, 72], [126, 72]];
-const FOOT_MM = { linear: 40, convex: 60, phased: 20 };
-function drawBody(w, M) {
-  const [ol, oe] = offsetMm();
-  const off = [0, 1, 2].map(i => w.L[i] * ol + w.E[i] * oe);
-  // Patient von vorn: seine rechte Seite (RAS +x) links im Bild, kranial (+z) oben; 0,5 Einheiten pro mm
-  const [sx, sy] = SPOTS[state.win];
-  const cx = sx - off[0] * 0.5, cy = sy - off[2] * 0.5;
-  const L = [-M[0][0], -M[2][0]], D = [-M[0][1], -M[2][1]];
-  const len = FOOT_MM[state.probe] * 0.25;
-  $('pmLine').setAttribute('x1', cx - L[0] * len); $('pmLine').setAttribute('y1', cy - L[1] * len);
-  $('pmLine').setAttribute('x2', cx + L[0] * len); $('pmLine').setAttribute('y2', cy + L[1] * len);
-  $('pmDot').setAttribute('cx', cx - L[0] * (len + 4)); $('pmDot').setAttribute('cy', cy - L[1] * (len + 4));
-  $('pmBeam').setAttribute('x1', cx); $('pmBeam').setAttribute('y1', cy);
-  $('pmBeam').setAttribute('x2', cx + D[0] * 30); $('pmBeam').setAttribute('y2', cy + D[1] * 30);
+
+// 3D-Körpermodell aus demselben CT, Sonde und mitbewegte Schallebene
+function draw3D(vol, M, o) {
+  const name = WINDOWS[state.win].vol;
+  if (anat3d.current !== anat3d.models[name]) {
+    if (!anat3d.loading) {
+      anat3d.loading = anat3d.show(name, `data/${name}/anatomy.glb`).finally(() => { anat3d.loading = null; });
+    }
+    return;
+  }
+  anat3d.showFan = state.fan;
+  anat3d.update({ o, M, kind: state.probe, depthCm: state.depth, topCm: topOffset(), us: usCanvas, usAspect: usCanvas.width / usCanvas.height });
+  const c = $('anat3d');
+  anat3d.render(c.clientWidth * (window.devicePixelRatio || 1), c.clientHeight * (window.devicePixelRatio || 1));
 }
 
 function drawOverlay(M) {
@@ -345,8 +347,9 @@ function setAnat(mode) {
   state.anat = mode;
   $('anatWrap').hidden = mode === 'off';
   $('anat').hidden = mode !== 'cut';
-  $('bodyView').toggleAttribute('hidden', mode !== 'body');   // SVG kennt .hidden nicht
-  $('anatTitle').textContent = mode === 'cut' ? 'Anatomie im Schnitt' : 'Sondenposition';
+  $('anat3d').hidden = mode !== 'body';
+  $('anat3dTools').hidden = mode !== 'body';
+  $('anatTitle').textContent = mode === 'cut' ? 'Anatomie im Schnitt' : '3D-Anatomie';
   resize();
   syncUI();
 }
@@ -435,6 +438,8 @@ function buildUI() {
   $('randomBtn').addEventListener('click', () => { randomCase(); syncUI(); });
   for (const b of document.querySelectorAll('#anatButtons button')) b.addEventListener('click', () => setAnat(b.dataset.mode));
   $('tint').addEventListener('change', e => { state.tint = e.target.checked; });
+  $('fanToggle').addEventListener('change', e => { state.fan = e.target.checked; });
+  $('viewReset').addEventListener('click', () => anat3d.resetView());
   $('camBtn').addEventListener('click', toggleWebcam);
   buildTagList();
   $('revealBtn').addEventListener('click', () => { state.hidden = false; syncUI(); });

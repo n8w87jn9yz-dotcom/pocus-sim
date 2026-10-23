@@ -12,3 +12,7 @@
 
 Beide Volumen sind mit `tools/build_volume.py` umgerechnet. Für bessere Bildqualität eignet sich ein Fall aus dem
 TotalSegmentator-Datensatz (CC BY 4.0, https://doi.org/10.5281/zenodo.6802613).
+
+## 3D-Modelle (anatomy.glb)
+Oberflächen aus den Gewebeklassen von `vol.bin.gz`, berechnet mit `tools/build_meshes.py` (Marching Cubes, geglättet).
+Gleiche Herkunft und Lizenz wie das jeweilige Volumen.
