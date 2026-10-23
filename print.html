@@ -3,37 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Marker-Blätter</title>
+<title>Marker fürs Handy</title>
 <style>
-  @page { size: A4 portrait; margin: 8mm; }
+  @page { size: A4 portrait; margin: 12mm; }
   body { margin: 0; font: 11pt/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #111; background: #fff; }
-  .hint { max-width: 190mm; margin: 12px auto; padding: 10px 14px; background: #eef5fb; border-radius: 8px; }
-  .page { width: 194mm; height: 278mm; margin: 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6mm; page-break-after: always; break-after: page; }
-  .marker svg { width: 190mm; height: 190mm; display: block; shape-rendering: crispEdges; }
-  .label { text-align: center; }
-  .label b { font-size: 20pt; display: block; }
-  .ruler { width: 152mm; border-top: 1.5px solid #111; text-align: center; font-size: 9pt; padding-top: 2px; }
+  .hint { max-width: 180mm; margin: 12px auto; padding: 10px 14px; background: #eef5fb; border-radius: 8px; }
+  .sheet { width: 180mm; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 14mm; justify-content: center; padding-top: 6mm; }
+  .card { width: 68mm; text-align: center; font-size: 9pt; }
+  .cut { width: 67.5mm; height: 67.5mm; outline: 0.3mm dashed #999; }
+  .marker svg { width: 67.5mm; height: 67.5mm; display: block; shape-rendering: crispEdges; }
+  .arrow { font-size: 9pt; margin-top: 2mm; }
   @media print { .hint { display: none; } }
 </style>
 </head>
 <body>
 <div class="hint">
-  <p><b>Drucken mit 100 % (tatsächliche Größe), nicht „an Seite anpassen“.</b> Das schwarze Quadrat muss 15,2 cm breit sein, die Linie unter dem Marker hilft beim Nachmessen.</p>
-  <p>Jedes Blatt aufrecht hinstellen (an eine Kiste oder ein Buch lehnen), 30–80 cm von der Sonde entfernt, so dass die Rückkamera des Handys es in der Startlage sieht. Für ein Schallfenster reicht ein Blatt, das zweite für Fenster mit anderer Blickrichtung.</p>
+  <p><b>Drucken mit 100 % (tatsächliche Größe), nicht „an Seite anpassen“.</b> Das schwarze Quadrat muss 5,4 cm breit sein, mit weißem Rand 6,75 cm.</p>
+  <p>Einen Marker an der gestrichelten Linie ausschneiden (der weiße Rand gehört dazu) und <b>hinten auf das Handy kleben, ganz unten</b> (an der Kante, die als Schallkopffläche dient), mittig und mit dem Pfeil nach oben, also Richtung Oberkante des Handys. Gerade und flach kleben, am besten auf die Hülle. Die anderen sind Ersatz.</p>
+  <p>Den Laptop so aufstellen, dass die Webcam die Rückseite des Handys sieht, zum Beispiel gegenüber auf der anderen Seite von Puppe oder Partner, 50–100 cm entfernt.</p>
 </div>
-<div id="pages"></div>
+<div class="sheet" id="sheet"></div>
 <script src="vendor/js-aruco2/cv.js"></script>
 <script src="vendor/js-aruco2/aruco.js"></script>
 <script>
   const dict = new AR.Dictionary('ARUCO_MIP_36h12');
-  const pages = document.getElementById('pages');
-  for (const id of [1, 2, 3]) {
-    const page = document.createElement('section');
-    page.className = 'page';
-    page.innerHTML = `<div class="marker">${dict.generateSVG(id)}</div>
-      <div class="ruler">15,2 cm</div>
-      <div class="label"><b>POCUS-Sim · Blatt ${id}</b>Aufrecht hinstellen, diese Seite zur Sonde.</div>`;
-    pages.append(page);
+  for (let i = 0; i < 6; i++) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="arrow">▲ oben (Richtung Handy-Oberkante)</div><div class="cut"><div class="marker">${dict.generateSVG(1)}</div></div><div class="arrow">Unterkante Handy ▼</div>`;
+    document.getElementById('sheet').append(card);
   }
 </script>
 </body>
