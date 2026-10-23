@@ -67,7 +67,7 @@ function connect(code) {
 }
 
 // ---------- Schallkopf-Anzeige ----------
-// Gehäuse verbreitert sich zur Schallfläche an der Unterkante (y = 400). w = halbe Breite des Kopfs.
+// Gehäuse verbreitert sich zur Schallfläche bei y = 400, das SVG dreht es dann nach oben. w = halbe Breite des Kopfs.
 const HEADS = {
   linear: { w: 82, lens: 'M18 352 h164 v36 q0 10 -10 10 h-144 q-10 0 -10 -10 z' },
   convex: { w: 78, lens: 'M22 350 h156 q2 28 -14 40 q-64 18 -128 0 q-16 -12 -14 -40 z' },
@@ -82,8 +82,9 @@ function showProbe(key) {
   $('probeGrip').setAttribute('d', 'M74 100 H126 L129 148 Q100 156 71 148 Z');
   $('probeLens').setAttribute('d', lens);
   $('probeMarker').setAttribute('transform', `translate(${l - 10} 318)`);
-  $('markerLabel').setAttribute('x', l + 4);
-  $('markerLabel').setAttribute('y', 333);
+  // Marker liegt nach der Drehung an der rechten Kante bei y ≈ 60…82
+  $('markerLabel').setAttribute('x', r - 4);
+  $('markerLabel').setAttribute('y', 75);
   $('probeName').textContent = `${PROBES[key].name} · ${PROBES[key].mhz} MHz`;
   for (const b of document.querySelectorAll('#probeTypes button')) b.classList.toggle('active', b.dataset.key === key);
 }

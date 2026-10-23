@@ -8,25 +8,12 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="probe">
-<header class="probe-head">
-  <span id="probeName">Schallkopf</span>
-  <span class="status" id="status">Nicht verbunden</span>
-</header>
+<p class="face-hint">▲ Schallfläche: Oberkante des Handys auf den Patienten ▲</p>
 
-<section id="pairBox" class="card">
-  <p>Code vom Laptop eingeben:</p>
-  <form id="pairForm" class="pair-form">
-    <input id="codeInput" autocomplete="off" autocapitalize="none" maxlength="6" placeholder="z. B. a1b2c3">
-    <button>Verbinden</button>
-  </form>
-</section>
-
-<div class="buttons grid3 probe-types" id="probeTypes"></div>
-<p class="small center" id="tagNote" hidden></p>
-
-<!-- Das Handy ist der Schallkopf: Unterkante des Bildschirms = Schallfläche, linke Kante = Marker.
+<!-- Das Handy ist der Schallkopf, kopfüber gehalten: Oberkante = Schallfläche, rechte Kante = Marker.
+     Gezeichnet wird die Sonde mit dem Kopf nach unten und dann um 180° gedreht, die Texte bleiben lesbar.
      Der Einschaltknopf kalibriert, Wischen auf dem Gehäuse verschiebt die Sonde. -->
-<svg id="probeView" class="probe-view" viewBox="0 0 200 400" preserveAspectRatio="xMidYMax meet" aria-label="Schallkopf">
+<svg id="probeView" class="probe-view" viewBox="0 0 200 400" preserveAspectRatio="xMidYMin meet" aria-label="Schallkopf">
   <defs>
     <linearGradient id="shell" x1="0" x2="1">
       <stop offset="0" stop-color="#9aa5b0"/><stop offset="0.18" stop-color="#e9edf1"/>
@@ -42,7 +29,8 @@
       <stop offset="0" stop-color="#5fc8ff"/><stop offset="1" stop-color="#1679b8"/>
     </radialGradient>
   </defs>
-  <path d="M100 0 C100 20 104 30 100 52" stroke="#20262c" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <g transform="rotate(180 100 200)">
+    <path d="M100 0 C100 20 104 30 100 52" stroke="#20262c" stroke-width="12" fill="none" stroke-linecap="round"/>
   <rect x="86" y="44" width="28" height="40" rx="9" fill="#2a3138"/>
   <path id="probeBody" fill="url(#shell)" stroke="#6b7682" stroke-width="1.5"/>
   <path id="probeGrip" fill="url(#grip)" opacity="0.9"/>
@@ -51,15 +39,31 @@
     <rect width="9" height="22" rx="3" fill="#2a3138"/>
     <circle cx="4.5" cy="11" r="3" fill="#4fd18b"/>
   </g>
-  <text id="markerLabel" class="probe-label dark" text-anchor="start">◀ Marker</text>
-  <g id="calibBtn" class="power" role="button" aria-label="Kalibrieren" tabindex="0">
-    <circle cx="100" cy="196" r="28" fill="url(#btn)" stroke="#0d3b5a" stroke-width="2"/>
-    <path d="M100 179 v16 M90 186 a14 14 0 1 0 20 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
   </g>
-  <text x="100" y="246" class="probe-label strong dark" text-anchor="middle" id="calibText">Kalibrieren</text>
-  <text x="100" y="266" class="probe-label dark" text-anchor="middle">Wischen = verschieben</text>
+  <g id="calibBtn" class="power" role="button" aria-label="Kalibrieren" tabindex="0">
+    <circle cx="100" cy="204" r="28" fill="url(#btn)" stroke="#0d3b5a" stroke-width="2"/>
+    <path d="M100 187 v16 M90 194 a14 14 0 1 0 20 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+  <text id="markerLabel" class="probe-label dark" text-anchor="end">Marker ▶</text>
+  <text x="100" y="124" class="probe-label dark tiny" text-anchor="middle">Wischen = schieben</text>
+  <text x="100" y="166" class="probe-label strong dark" text-anchor="middle" id="calibText">Kalibrieren</text>
 </svg>
-<p class="face-hint">▼ Schallfläche: diese Kante auf den Patienten ▼</p>
+<footer class="probe-head">
+  <span id="probeName">Schallkopf</span>
+  <span class="status" id="status">Nicht verbunden</span>
+</footer>
+
+<section id="pairBox" class="card">
+  <p>Code vom Laptop eingeben:</p>
+  <form id="pairForm" class="pair-form">
+    <input id="codeInput" autocomplete="off" autocapitalize="none" maxlength="6" placeholder="z. B. a1b2c3">
+    <button>Verbinden</button>
+  </form>
+</section>
+
+<div class="buttons grid3 probe-types" id="probeTypes"></div>
+<p class="small center" id="tagNote" hidden></p>
+
 
 <script src="vendor/peerjs.min.js"></script>
 <script type="module" src="js/probe.js"></script>

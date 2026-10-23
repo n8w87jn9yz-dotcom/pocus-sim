@@ -23,7 +23,7 @@ let conn = null;
 let time = 0;
 
 const $ = id => document.getElementById(id);
-const usCanvas = $('us'), overlay = $('overlay'), anatCanvas = $('anat');
+const usCanvas = $('us'), overlay = $('overlay');
 const cutCanvas = document.createElement('canvas');   // Anatomie-Schnitt als Textur für die 3D-Schallebene
 const anat3d = new Anatomy3D($('anat3d'));
 
@@ -63,8 +63,8 @@ function resize() {
   usCanvas.width = Math.round(w * scale);
   usCanvas.height = RENDER_H;
   const dpr = window.devicePixelRatio || 1;
-  overlay.width = anatCanvas.width = Math.round(w * dpr);
-  overlay.height = anatCanvas.height = Math.round(h * dpr);
+  overlay.width = Math.round(w * dpr);
+  overlay.height = Math.round(h * dpr);
 }
 window.addEventListener('resize', resize);
 
@@ -166,7 +166,6 @@ function render() {
   const vol = currentVolume();
   if (!vol) {
     gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-    if (state.anat === 'cut') anatCanvas.getContext('2d').clearRect(0, 0, anatCanvas.width, anatCanvas.height);
     return;
   }
   const w = vol.meta.windows[WINDOWS[state.win].key];
@@ -175,14 +174,9 @@ function render() {
   const o = probeOrigin(vol, w);
   // In der 3D-Ansicht zeigt die Schallebene wahlweise die Anatomie (Standard) oder das Ultraschallbild
   const cut3d = state.anat === 'body' && state.fan && state.fanSrc === 'anat';
-  const labels = (state.anat === 'cut' || cut3d || state.tint) ? sampleLabels(vol, M, o) : null;
-  if (state.anat === 'cut' || cut3d) drawPass(vol, M, o, 1);
-  if (state.anat === 'cut') {
-    const ctx = anatCanvas.getContext('2d');
-    ctx.drawImage(usCanvas, 0, 0, anatCanvas.width, anatCanvas.height);
-    drawLabels(ctx, labels.all, anatCanvas.width, anatCanvas.height);
-  }
+  const labels = (cut3d || state.tint) ? sampleLabels(vol, M, o) : null;
   if (cut3d) {
+    drawPass(vol, M, o, 1);
     if (cutCanvas.width !== usCanvas.width || cutCanvas.height !== usCanvas.height) {
       cutCanvas.width = usCanvas.width;
       cutCanvas.height = usCanvas.height;
@@ -363,11 +357,29 @@ function setProbe(key) {
 }
 function setWindow(i) {
   state.win = i;
+  showHoldTip();
   state.slide = [0, 0];
   state.track = null;
   tracker?.reset();
   syncUI();
 }
+// Kurzer Hinweis, wie die Sonde für dieses Fenster gehalten wird, abschaltbar
+let holdOff = false;
+try { holdOff = localStorage.getItem('pocus-hold-off') === '1'; } catch { /* kein Speicher */ }
+function showHoldTip() {
+  if (holdOff) return;
+  const w = WINDOWS[state.win];
+  $('holdTitle').textContent = `${w.name}: Sonde so halten`;
+  $('holdList').replaceChildren(...w.hold.map(t => Object.assign(document.createElement('li'), { textContent: t })));
+  $('holdTip').hidden = false;
+}
+function setHoldOff(off) {
+  holdOff = off;
+  try { localStorage.setItem('pocus-hold-off', off ? '1' : '0'); } catch { /* gilt dann nur bis zum Neuladen */ }
+  $('holdToggle').checked = !off;
+  if (off) $('holdTip').hidden = true;
+}
+
 function changeDepth(d) {
   const p = PROBES[state.probe];
   state.depth = Math.max(p.min, Math.min(p.max, state.depth + d));
@@ -386,11 +398,10 @@ function calibrate() {
 function setAnat(mode) {
   state.anat = mode;
   $('anatWrap').hidden = mode === 'off';
-  $('anat').hidden = mode !== 'cut';
   $('anat3d').hidden = mode !== 'body';
   $('anat3dTools').hidden = mode !== 'body';
   $('fanSrc').hidden = mode !== 'body';
-  $('anatTitle').textContent = mode === 'cut' ? 'Anatomie im Schnitt' : '3D-Anatomie';
+  $('anatTitle').textContent = '3D-Anatomie';
   resize();
   syncUI();
 }
@@ -479,6 +490,10 @@ function buildUI() {
   $('randomBtn').addEventListener('click', () => { randomCase(); syncUI(); });
   for (const b of document.querySelectorAll('#anatButtons button')) b.addEventListener('click', () => setAnat(b.dataset.mode));
   $('tint').addEventListener('change', e => { state.tint = e.target.checked; });
+  $('holdOk').addEventListener('click', () => { $('holdTip').hidden = true; });
+  $('holdOff').addEventListener('click', () => setHoldOff(true));
+  $('holdToggle').checked = !holdOff;
+  $('holdToggle').addEventListener('change', e => { setHoldOff(!e.target.checked); if (e.target.checked) showHoldTip(); });
   for (const b of document.querySelectorAll('#fanSrc button')) {
     b.addEventListener('click', () => {
       state.fan = b.dataset.src !== 'off';
@@ -533,7 +548,7 @@ function bindMouse() {
     else if (k === 's') setProbe('phased');
     else if (k === 'f') { state.frozen = !state.frozen; syncUI(); }
     else if (k === 'n') calibrate();
-    else if (k === 'a') setAnat({ off: 'cut', cut: 'body', body: 'off' }[state.anat]);
+    else if (k === 'a') setAnat(state.anat === 'body' ? 'off' : 'body');
     else if (k === 't') { state.tint = !state.tint; syncUI(); }
     else if (k === 'm') toggleMouseProbe();
     else if (k === 'e' && mouseProbe.on) toggleMeasure();
@@ -554,9 +569,9 @@ function onData(m) {
   switch (m.t) {
     case 'pose': pose.target = m.q; pose.source = 'phone'; break;
     case 'probe': if (m.v in PROBES) setProbe(m.v); break;
-    case 'calib': calibrate(); showNote('Kalibriert'); break;
+    case 'calib': calibrate(); showNote('Kalibriert'); $('holdTip').hidden = true; break;
     case 'tag': applyTag(m); break;
-    case 'swipe': if (!state.frozen) slideProbe(m.d[0] * SWIPE_MM, m.d[1] * SWIPE_MM); break;
+    case 'swipe': if (!state.frozen) slideProbe(-m.d[0] * SWIPE_MM, -m.d[1] * SWIPE_MM); break;   // Sonde am Handy steht kopfüber
     case 'hello': sendState(); break;
   }
 }
@@ -632,7 +647,7 @@ function onMouseMove(e) {
   const a = mouseProbe.turn * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
   const dx = c * e.movementX - s * e.movementY, dy = s * e.movementX + c * e.movementY;
   if (mouseProbe.measure) mouseProbe.measure.d += Math.hypot(dx, dy);
-  // Maus nach rechts = Sonde zur rechten Handykante, Maus zu dir = Elevation zum Bildschirm hin
+  // Maus nach rechts (von dir aus gesehen) = Sonde nach rechts, Maus zu dir = Elevation zum Bildschirm hin
   if (!state.frozen) slideProbe(dx / mouseProbe.perMm, dy / mouseProbe.perMm);
   updateMouseStatus();
 }
@@ -728,6 +743,7 @@ bindMouse();
 bindMouseProbe();
 resize();
 setAnat(state.anat);
+showHoldTip();
 startPeer();
 requestAnimationFrame(loop);
 window.__sim = { state, pose, mouseProbe, setWindow, setProbe, calibrate, setAnat, applyTag, slideProbe, onData };
