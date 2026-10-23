@@ -14,7 +14,7 @@ Reine statische Web-App ohne Build-Schritt.
 - `print.html`: Druckvorlage für den Handy-Marker
 - `js/common.js`: Schallköpfe, Fenster, Befunde, Rotationsmathematik
 - `tools/build_volume.py`: wandelt CT + Segmentierung in `data/<name>/` um
-- `tools/build_meshes.py`: baut daraus die 3D-Modelle `data/<name>/anatomy.glb` (`python tools/build_meshes.py --name thorax`)
+- `tools/build_meshes.py`: baut daraus die 3D-Modelle `data/<name>/anatomy.glb` (`python tools/build_meshes.py --name thorax`, danach mit `npx @gltf-transform/cli meshopt` komprimieren)
 - `data/`: fertige Volumen, siehe [data/QUELLEN.md](data/QUELLEN.md)
 - `docs/architektur.md`: Architektur und Entscheidungen
 

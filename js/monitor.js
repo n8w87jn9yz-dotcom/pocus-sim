@@ -4,7 +4,7 @@ import {
   matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
 } from './common.js';
 import { WebcamTracker } from './webcam.js';
-import { Anatomy3D } from './anatomy3d.js';
+import { Anatomy3D, LAYERS } from './anatomy3d.js';
 
 const state = {
   probe: 'convex', win: 0, depth: PROBES.convex.def, gain: 1.0,
@@ -440,6 +440,16 @@ function buildUI() {
   $('tint').addEventListener('change', e => { state.tint = e.target.checked; });
   $('fanToggle').addEventListener('change', e => { state.fan = e.target.checked; });
   $('viewReset').addEventListener('click', () => anat3d.resetView());
+  for (const l of LAYERS) {
+    const lab = document.createElement('label');
+    lab.className = 'check';
+    const c = document.createElement('input');
+    c.type = 'checkbox';
+    c.checked = l.on;
+    c.addEventListener('change', () => anat3d.setLayer(l.id, c.checked));
+    lab.append(c, ' ' + l.name);
+    $('layerList').append(lab);
+  }
   $('camBtn').addEventListener('click', toggleWebcam);
   buildTagList();
   $('revealBtn').addEventListener('click', () => { state.hidden = false; syncUI(); });

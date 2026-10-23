@@ -2,3 +2,4 @@ vendor/peerjs.min.js: PeerJS 1.5.4, MIT-Lizenz, https://github.com/peers/peerjs
 vendor/qrcode.js: qrcode-generator 1.4.4, MIT-Lizenz, https://github.com/kazuhikoarase/qrcode-generator
 vendor/js-aruco2/: js-aruco2 2.0.0, MIT-Lizenz, https://github.com/damianofalcioni/js-aruco2
 vendor/three/: three.js r170, MIT-Lizenz, https://github.com/mrdoob/three.js (Kern + GLTFLoader, OrbitControls, RoomEnvironment)
+vendor/three/addons/libs/meshopt_decoder.module.js: meshoptimizer-Decoder, MIT-Lizenz, https://github.com/zeux/meshoptimizer (über three.js)

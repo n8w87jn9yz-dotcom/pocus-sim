@@ -19,10 +19,12 @@
       <div class="anat-wrap" id="anatWrap" hidden>
         <canvas id="anat"></canvas>
         <canvas id="anat3d" hidden></canvas>
-        <div class="anat3d-tools" id="anat3dTools" hidden>
+        <details class="anat3d-tools" id="anat3dTools" hidden>
+          <summary>Ebenen</summary>
+          <div class="layers" id="layerList"></div>
           <label class="check"><input type="checkbox" id="fanToggle" checked> Schallebene</label>
           <button id="viewReset" title="Kamera wieder der Sonde folgen lassen">Ansicht zurücksetzen</button>
-        </div>
+        </details>
         <p class="anat-title" id="anatTitle"></p>
       </div>
     </div>
