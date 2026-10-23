@@ -10,6 +10,8 @@ Reine statische Web-App ohne Build-Schritt.
 - `index.html`: Monitor am Laptop: Bild, QR-Kopplung, Fensterwahl, Schallkopf, Befunde
 - `probe.html`: Schallkopf am Handy: Schallkopfwahl, Gyro, Ansetzen am Fenster, Tiefe/Gain, Freeze, Wisch-Pad
 - `js/shader.js`: Bilderzeugung aus dem CT-Volumen (WebGL2)
+- `js/tracker.js`: Kamera-Tracking mit ArUco-Markern (js-aruco2)
+- `print.html`: Druckvorlage für die Marker-Blätter
 - `js/common.js`: Schallköpfe, Fenster, Befunde, Rotationsmathematik
 - `tools/build_volume.py`: wandelt CT + Segmentierung in `data/<name>/` um
 - `data/`: fertige Volumen, siehe [data/QUELLEN.md](data/QUELLEN.md)
@@ -29,6 +31,14 @@ Das Handy braucht **HTTPS**, sonst liefert der Browser keine Sensordaten. Am ein
 3. Handy hochkant halten: Unterkante = Schallkopffläche, Bildschirm zu dir, linke Kante = Marker.
 4. Sonde in Standardlage auf das Fenster setzen (Phantom, Partner oder in der Luft) und unter „Ansetzen“ das Fenster tippen.
 
+### Kamera-Tracking (Verschieben)
+1. `print.html` öffnen und die Marker-Blätter mit 100 % drucken (schwarzes Quadrat 15,2 cm).
+2. Ein Blatt aufrecht 30–80 cm neben Puppe oder Partner stellen, so dass die Rückkamera es in der Startlage sieht.
+3. Am Handy „Kamera-Tracking starten“, Sonde am Landmark ansetzen (z. B. Rippenbogen in der Axillarlinie) und das Fenster tippen.
+4. Ab dann verschiebt sich das Schnittbild mit der Sonde. „Größe“ am Laptop gleicht Puppe oder Partner an den CT-Körper an.
+
+Die Kamera liefert nur die Position (Markermitte), die Drehung kommt weiter vom Gyro.
+
 Ohne Handy: lokal `python3 -m http.server` im Repo und `http://localhost:8000` öffnen.
 Maus ziehen = Kippen/Fächern, Umschalttaste + ziehen = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, 1–6 = Fenster.
 `?h=300` rendert mit geringerer Auflösung, `?debug` zeigt die Gewebeklassen farbig.
@@ -41,7 +51,8 @@ python tools/build_volume.py --ct ct.nii.gz --seg seg.nii.gz --name thorax --win
 ```
 
 ## Grenzen
-- Das Gyro misst nur die Ausrichtung. Die Position kommt aus dem Ansetzen am Fenster plus Wisch-Pad.
+- Das Gyro misst nur die Ausrichtung. Die Position kommt aus dem Ansetzen am Fenster plus Kamera-Tracking oder Wisch-Pad.
+- Kamera-Tracking: Genauigkeit grob 0,5–1 cm, die Brennweite ist geschätzt. Das Blatt muss im Bild bleiben, sonst bleibt die Position stehen.
 - Die Herzkammern sind im nativen CT nicht sichtbar. Ihre Wände werden aus der echten Herzkontur abgeleitet.
 - Freie Flüssigkeit und Perikarderguss sind in die echte Anatomie eingerechnet, nicht aus Patientendaten.
 - Auflösung 1,5 mm (Thorax) bzw. 3 mm Ursprungsdaten (Abdomen). Medizinisch nicht validiert.

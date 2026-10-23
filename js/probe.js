@@ -1,10 +1,12 @@
-import { PROBES, WINDOWS, quatFromEuler } from './common.js';
+import { PROBES, WINDOWS, quatFromEuler, matFromQuat } from './common.js';
+import { Tracker } from './tracker.js';
 
 const $ = id => document.getElementById(id);
 let conn = null;
 let wakeLock = null;
 let peer = null;
 let gotEvent = false;
+let tracker = null;
 
 function send(msg) {
   if (conn && conn.open) conn.send(msg);
@@ -49,10 +51,12 @@ let lastSent = 0;
 function onOrientation(e) {
   if (e.alpha === null) return;
   gotEvent = true;
+  const q = quatFromEuler(e.alpha, e.beta, e.gamma);
+  tracker?.setOrientation(matFromQuat(q));
   const now = performance.now();
   if (now - lastSent < 15) return;
   lastSent = now;
-  send({ t: 'pose', q: quatFromEuler(e.alpha, e.beta, e.gamma) });
+  send({ t: 'pose', q });
 }
 
 async function lockScreen() {
@@ -91,11 +95,45 @@ function button(label, onClick, data = {}) {
 
 for (const [key, p] of Object.entries(PROBES)) $('probeButtons').append(button(p.name, () => send({ t: 'probe', v: key }), { key }));
 // Ansetzen: Fenster wählen und die aktuelle Haltung als Standardlage übernehmen (auch am Phantom)
-WINDOWS.forEach((w, i) => $('winButtons').append(button(w.name, () => send({ t: 'anchor', v: i }), { i })));
+WINDOWS.forEach((w, i) => $('winButtons').append(button(w.name, () => { tracker?.anchor(); send({ t: 'anchor', v: i }); }, { i })));
 for (const b of document.querySelectorAll('[data-cmd]')) {
   b.addEventListener('click', () => send({ t: b.dataset.cmd, d: +b.dataset.d || 0 }));
 }
 $('sensorBtn').addEventListener('click', startSensors);
+
+// ---------- Kamera-Tracking ----------
+let lastTrack = 0;
+function onTrack(u) {
+  $('camStatus').textContent = u.noGyro ? 'Erst „Sensoren starten“ tippen'
+    : u.ok ? `Blatt ${u.id}: ${u.d.map(v => Math.round(v / 10)).join(' / ')} cm`
+    : u.visible ? 'Blatt erkannt, jetzt ansetzen' : 'Kein Blatt im Bild';
+  const now = performance.now();
+  if (now - lastTrack < 33) return;
+  lastTrack = now;
+  send({ t: 'track', ok: u.ok, d: u.d, id: u.id, anchored: u.anchored });
+}
+
+$('camBtn').addEventListener('click', async () => {
+  if (tracker) {
+    tracker.stop();
+    tracker = null;
+    $('camBtn').classList.remove('active');
+    $('camBtn').textContent = 'Kamera-Tracking starten';
+    $('camBox').hidden = true;
+    return;
+  }
+  if (!window.isSecureContext) { setStatus('HTTPS nötig für die Kamera'); return; }
+  try {
+    tracker = new Tracker($('camVideo'), $('camPreview'), onTrack);
+    await tracker.start();
+    $('camBtn').classList.add('active');
+    $('camBtn').textContent = 'Kamera-Tracking stoppen';
+    $('camBox').hidden = false;
+  } catch (err) {
+    tracker = null;
+    setStatus(`Kamerafehler: ${err.message}`);
+  }
+});
 $('pairForm').addEventListener('submit', e => { e.preventDefault(); connect($('codeInput').value); });
 
 // Wischen verschiebt die Sonde: horizontal = lateral, vertikal = in Elevationsrichtung
