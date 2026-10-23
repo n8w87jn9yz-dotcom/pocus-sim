@@ -10,7 +10,7 @@ Reine statische Web-App ohne Build-Schritt.
 - `index.html`: Monitor am Laptop: Bild, Anatomieansicht, QR-Kopplung, Fensterwahl, Schallkopf, Befunde, Webcam, NFC-Adressen
 - `probe.html`: Schallkopf am Handy: nur Sonde (Antippen wechselt den Typ) und „Kalibrieren“, liest NFC-Tags
 - `js/shader.js`: Bilderzeugung aus dem CT-Volumen (WebGL2), Anatomieansicht, Einfärbung der Organe
-- `js/webcam.js`: Webcam-Tracking des Markers hinten am Handy (js-aruco2)
+- `js/webcam.js`: altes Webcam-Tracking des Markers hinten am Handy (js-aruco2)
 - `print.html`: Druckvorlage für den Handy-Marker
 - `js/common.js`: Schallköpfe, Fenster, Befunde, Rotationsmathematik
 - `tools/build_volume.py`: wandelt CT + Segmentierung in `data/<name>/` um
@@ -32,14 +32,23 @@ Das Handy braucht **HTTPS**, sonst liefert der Browser keine Sensordaten. Am ein
 4. Fenster am Laptop wählen, Sonde in Standardlage aufsetzen (Phantom, Partner oder in der Luft) und am Handy „Kalibrieren“ tippen.
    Der erste Tipp startet die Sensoren, das iPhone fragt dabei nach Erlaubnis.
 
-### Verschieben mit der Webcam
-1. `print.html` mit 100 % drucken, einen Marker ausschneiden (schwarzes Quadrat 5,4 cm) und hinten unten mittig aufs Handy kleben, Pfeil nach oben.
-2. Laptop so stellen, dass die Webcam die Handyrückseite sieht, z. B. gegenüber auf der anderen Seite der Liege, 50–100 cm entfernt.
-3. Am Laptop „Webcam starten“, Sonde ansetzen, am Handy „Kalibrieren“. Ab dann folgt das Schnittbild dem Verschieben.
-4. „Größe“ gleicht Puppe oder Partner an den CT-Körper an.
+### Verschieben mit der Maus-Sonde
+1. Eine Funkmaus (optisch oder Laser, am Laptop verbunden) mit Gummiband oder Klett unter die Unterkante des Handys binden.
+   Maus vorn zeigt von dir weg, also in Richtung Handyrückseite. Sitzt sie anders, am Laptop bei „Maus“ die Drehung wählen.
+2. Am Laptop „Maus-Sonde starten“ (oder Taste M). Der Mauszeiger verschwindet, Esc beendet. Den Trackpad dabei nicht berühren.
+3. Sonde am Fenster ansetzen und am Handy „Kalibrieren“. Ab dann folgt das Schnittbild dem Gleiten über Shirt, Handtuch oder Phantom.
+4. Einmal einmessen: Taste E (oder Mausklick), Sonde genau 10 cm am Lineal entlang schieben, nochmal E. Der Maßstab bleibt gespeichert.
+5. „Größe“ gleicht Puppe oder Partner an den CT-Körper an.
 
-Die Webcam liefert die Position der Markermitte, die Drehung kommt vom Gyro. Die Lage der Webcam im Raum wird
-aus beiden laufend geschätzt, nur die Verschiebung seit dem Kalibrieren wird verwendet.
+Die Maus misst das Gleiten in ihrer eigenen Richtung, das Gyro dreht es in die Körperrichtung. Kippt man die Sonde stark,
+hebt die Maus ab und meldet nichts, die Position bleibt dann stehen. Chrome liefert rohe Mauspunkte ohne Zeigerbeschleunigung,
+Safari nur die beschleunigte Zeigerbewegung, dort ist der Weg bei schnellem Schieben zu lang.
+
+**Ohne Maus:** Im Wischfeld am Handy wischen wie auf einem Touchpad: seitlich = entlang der Sonde, nach unten = zu dir hin.
+
+### Verschieben mit der Webcam (alt)
+Unter „Webcam (alt)“: `print.html` mit 100 % drucken, Marker hinten unten aufs Handy kleben, Laptop so stellen, dass die Webcam
+die Handyrückseite sieht. Funktioniert praktisch nur, wenn das Handy aufrecht steht, also eher an der Lunge.
 
 ### Anatomie und Einfärbung
 „Anatomie im Schnitt“ zeigt rechts neben dem Bild dieselbe Schnittebene in Gewebefarben mit Beschriftung,
@@ -62,7 +71,7 @@ python tools/build_volume.py --ct ct.nii.gz --seg seg.nii.gz --name thorax --win
 ```
 
 ## Grenzen
-- Das Gyro misst nur die Ausrichtung. Die Position kommt aus dem Kalibrieren am Fenster plus Webcam-Tracking (oder Pfeiltasten).
+- Das Gyro misst nur die Ausrichtung. Die Position kommt aus dem Kalibrieren am Fenster plus Maus-Sonde, Wischen oder Pfeiltasten. Die Maus driftet nur wenig, nach längerem Schallen hilft trotzdem neu kalibrieren.
 - Webcam-Tracking: in der Bildebene der Webcam grob 0,5 cm genau, auf die Webcam zu oder von ihr weg ungenauer (1–2 cm).
   Der Marker muss im Bild bleiben, sonst bleibt die Position stehen. Noch nicht mit echtem Gerät getestet.
 - Die Herzkammern sind im nativen CT nicht sichtbar. Wände, Kammern und Vorhöfe werden aus der echten Herzkontur

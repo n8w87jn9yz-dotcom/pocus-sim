@@ -148,6 +148,18 @@ $('probeView').addEventListener('click', () => {
   send({ t: 'probe', v: next });
 });
 
+// Wischfeld: Ersatz für die Maus-Sonde, Bewegung wird gesammelt und gebündelt geschickt
+let swipe = null, swipeSum = [0, 0], swipeTimer = 0;
+const pad = $('swipePad');
+pad.addEventListener('pointerdown', e => { swipe = [e.clientX, e.clientY]; pad.setPointerCapture(e.pointerId); });
+pad.addEventListener('pointermove', e => {
+  if (!swipe) return;
+  swipeSum = [swipeSum[0] + e.clientX - swipe[0], swipeSum[1] + e.clientY - swipe[1]];
+  swipe = [e.clientX, e.clientY];
+  if (!swipeTimer) swipeTimer = setTimeout(() => { send({ t: 'swipe', d: swipeSum }); swipeSum = [0, 0]; swipeTimer = 0; }, 30);
+});
+for (const ev of ['pointerup', 'pointercancel']) pad.addEventListener(ev, () => { swipe = null; });
+
 $('pairForm').addEventListener('submit', e => { e.preventDefault(); connect($('codeInput').value); });
 
 showProbe(probe);

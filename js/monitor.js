@@ -13,6 +13,10 @@ const state = {
   anat: 'off', tint: false, note: '',
 };
 let tracker = null;
+// Maus-Sonde: Funkmaus unter dem Handy, gemessen werden Mauspunkte pro mm Gleitweg
+const mouseProbe = { on: false, perMm: 39.4, turn: 0, measure: null };
+try { const m = JSON.parse(localStorage.getItem('pocus-mouse') || '{}'); if (m.perMm > 0) mouseProbe.perMm = m.perMm; if ([0, 90, 180, 270].includes(m.turn)) mouseProbe.turn = m.turn; } catch { /* Standardwerte */ }
+const SWIPE_MM = 0.2;   // Wischen am Handy: mm Gleitweg pro Bildschirmpunkt
 const pose = { target: null, q: null, Rn: null, mouse: { rock: 0, fan: 0, rot: 0 }, source: 'mouse' };
 let conn = null;
 let time = 0;
@@ -146,7 +150,7 @@ function probeOrigin(vol, w) {
   return p;
 }
 
-// Verschiebung (mm) im Fenstersystem: Pfeiltasten und Webcam, umgerechnet auf die Größe des CT-Körpers
+// Verschiebung (mm) im Fenstersystem: Pfeiltasten, Maus-Sonde, Wischen und Webcam, umgerechnet auf die Größe des CT-Körpers
 function offsetMm() {
   const k = 100 / state.bodyScale;
   const t = state.track || [0, 0, 0];
@@ -472,7 +476,10 @@ function buildUI() {
 // ---------- Maus und Tastatur als Ersatz für das Handy ----------
 function bindMouse() {
   let drag = null;
-  overlay.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; overlay.setPointerCapture(e.pointerId); });
+  overlay.addEventListener('pointerdown', e => {
+    if (mouseProbe.on) { toggleMeasure(); return; }
+    drag = { x: e.clientX, y: e.clientY }; overlay.setPointerCapture(e.pointerId);
+  });
   overlay.addEventListener('pointerup', () => { drag = null; });
   overlay.addEventListener('pointermove', e => {
     if (!drag) return;
@@ -494,6 +501,8 @@ function bindMouse() {
     else if (k === 'n') calibrate();
     else if (k === 'a') setAnat({ off: 'cut', cut: 'body', body: 'off' }[state.anat]);
     else if (k === 't') { state.tint = !state.tint; syncUI(); }
+    else if (k === 'm') toggleMouseProbe();
+    else if (k === 'e' && mouseProbe.on) toggleMeasure();
     else if (e.key.startsWith('Arrow')) {
       const d = { ArrowLeft: [-0.3, 0], ArrowRight: [0.3, 0], ArrowUp: [0, 0.3], ArrowDown: [0, -0.3] }[e.key];
       slide(d[0], d[1]);
@@ -513,6 +522,7 @@ function onData(m) {
     case 'probe': if (m.v in PROBES) setProbe(m.v); break;
     case 'calib': calibrate(); showNote('Kalibriert'); break;
     case 'tag': applyTag(m); break;
+    case 'swipe': if (!state.frozen) slideProbe(m.d[0] * SWIPE_MM, m.d[1] * SWIPE_MM); break;
     case 'hello': sendState(); break;
   }
 }
@@ -551,6 +561,81 @@ function startPeer() {
     $('connStatus').textContent = `Verbindungsfehler: ${err.type}`;
   });
   peer.on('disconnected', () => setTimeout(() => { if (!peer.destroyed) peer.reconnect(); }, 3000));
+}
+
+// ---------- Maus-Sonde und Wischen ----------
+// Gleitweg im Sondensystem (lateral, Elevation in mm) auf die Kalibrierlage drehen und aufsummieren.
+// Nur die Drehung der Sonde auf der Haut zählt, Kippen und Fächern ändern die Gleitrichtung nicht.
+function slideProbe(lat, elev) {
+  let lx = lastM[0][0], le = lastM[2][0];
+  const n = Math.hypot(lx, le);
+  if (n < 0.3) return;   // Sonde steht fast senkrecht zur Lateralrichtung, Gleitrichtung unklar
+  lx /= n; le /= n;
+  const t = state.track || [0, 0, 0];
+  const lim = v => Math.max(-150, Math.min(150, v));
+  state.track = [lim(t[0] + lx * lat - le * elev), 0, lim(t[2] + le * lat + lx * elev)];
+}
+
+async function toggleMouseProbe() {
+  if (document.pointerLockElement) { document.exitPointerLock(); return; }
+  // Rohe Mauspunkte ohne Zeigerbeschleunigung (Chrome), sonst normale Zeigerbewegung
+  try { await overlay.requestPointerLock({ unadjustedMovement: true }); } catch {
+    try { await overlay.requestPointerLock(); } catch (err) { $('mouseStatus').textContent = `Maus-Sonde nicht verfügbar: ${err.message}`; }
+  }
+}
+
+function onPointerLock() {
+  mouseProbe.on = document.pointerLockElement === overlay;
+  mouseProbe.measure = null;
+  state.trackInfo = mouseProbe.on ? 'Maus-Sonde' : '';
+  $('mouseBtn').classList.toggle('active', mouseProbe.on);
+  $('mouseBtn').textContent = mouseProbe.on ? 'Maus-Sonde aktiv (Esc beendet)' : 'Maus-Sonde starten';
+  updateMouseStatus();
+}
+
+function onMouseMove(e) {
+  if (!mouseProbe.on) return;
+  const a = mouseProbe.turn * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  const dx = c * e.movementX - s * e.movementY, dy = s * e.movementX + c * e.movementY;
+  if (mouseProbe.measure) mouseProbe.measure.d += Math.hypot(dx, dy);
+  // Maus nach rechts = Sonde zur rechten Handykante, Maus zu dir = Elevation zum Bildschirm hin
+  if (!state.frozen) slideProbe(dx / mouseProbe.perMm, dy / mouseProbe.perMm);
+  updateMouseStatus();
+}
+
+// Maßstab: E oder Mausklick, Sonde 10 cm am Lineal entlang schieben, nochmal E oder Klick
+function toggleMeasure() {
+  if (!mouseProbe.measure) { mouseProbe.measure = { d: 0 }; updateMouseStatus(); return; }
+  const d = mouseProbe.measure.d;
+  mouseProbe.measure = null;
+  if (d > 50) {
+    mouseProbe.perMm = d / 100;
+    saveMouse();
+    showNote('Maus-Maßstab eingemessen');
+  }
+  updateMouseStatus();
+}
+
+function saveMouse() {
+  try { localStorage.setItem('pocus-mouse', JSON.stringify({ perMm: mouseProbe.perMm, turn: mouseProbe.turn })); } catch { /* dann beim nächsten Mal neu einmessen */ }
+}
+
+function updateMouseStatus() {
+  const t = state.track || [0, 0, 0];
+  const cm = v => (v / 10).toFixed(1).replace('.', ',');
+  $('mouseStatus').textContent = mouseProbe.measure
+    ? `Einmessen: Sonde genau 10 cm am Lineal schieben, dann E oder Klick (${Math.round(mouseProbe.measure.d / mouseProbe.perMm)} mm)`
+    : mouseProbe.on ? `Verschiebung ${cm(t[0])} / ${cm(t[2])} cm · ${mouseProbe.perMm.toFixed(1).replace('.', ',')} Punkte/mm`
+    : 'Aus. Wischen am Handy verschiebt die Sonde auch ohne Maus.';
+}
+
+function bindMouseProbe() {
+  $('mouseBtn').addEventListener('click', toggleMouseProbe);
+  $('mouseTurn').value = mouseProbe.turn;
+  $('mouseTurn').addEventListener('change', e => { mouseProbe.turn = +e.target.value; saveMouse(); });
+  document.addEventListener('pointerlockchange', onPointerLock);
+  document.addEventListener('mousemove', onMouseMove);
+  updateMouseStatus();
 }
 
 // ---------- Webcam-Tracking (Marker hinten am Handy) ----------
@@ -606,8 +691,9 @@ function buildTagList() {
 
 buildUI();
 bindMouse();
+bindMouseProbe();
 resize();
 syncUI();
 startPeer();
 requestAnimationFrame(loop);
-window.__sim = { state, pose, setWindow, setProbe, calibrate, setAnat, applyTag };
+window.__sim = { state, pose, mouseProbe, setWindow, setProbe, calibrate, setAnat, applyTag, slideProbe, onData };
