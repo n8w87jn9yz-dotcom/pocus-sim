@@ -370,6 +370,8 @@ function showHoldTip() {
   if (holdOff) return;
   const w = WINDOWS[state.win];
   $('holdTitle').textContent = `${w.name}: Sonde so halten`;
+  $('holdImg').src = `data/hold/${w.key}.webp`;
+  $('holdImg').alt = `Sonde am Körper: ${w.name}`;
   $('holdList').replaceChildren(...w.hold.map(t => Object.assign(document.createElement('li'), { textContent: t })));
   $('holdTip').hidden = false;
 }

@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- Rendert die Bilder für den Halte-Hinweis (data/hold/<fenster>.webp), siehe tools/render_holds.sh -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Halte-Bilder</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+<style>body { margin: 0; background: #000; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="c" width="720" height="540"></canvas>
+<script type="module" src="hold_render.js"></script>
+</body>
+</html>

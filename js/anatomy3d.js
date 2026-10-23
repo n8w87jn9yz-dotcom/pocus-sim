@@ -132,7 +132,7 @@ const PROBE = {
   linear: { foot: 44, thick: 14, curve: 0, neck: 26, grip: 30, len: 120 },
   phased: { foot: 24, thick: 18, curve: 0, neck: 26, grip: 32, len: 115 },
 };
-function probeMesh(kind) {
+export function probeMesh(kind) {
   const p = PROBE[kind];
   const g = new THREE.Group();
   const shell = new THREE.MeshPhysicalMaterial({ color: 0xeef1f5, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.15 });
@@ -172,7 +172,7 @@ function probeMesh(kind) {
 }
 
 // Umriss des Schallfächers in der Ebene L (x) / D (y) des Sondensystems, in mm
-function fanShape(kind, depthMm) {
+export function fanShape(kind, depthMm) {
   const pts = [];
   if (kind === 'linear') {
     pts.push([-20, 0], [20, 0], [20, depthMm], [-20, depthMm]);
