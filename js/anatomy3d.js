@@ -408,9 +408,11 @@ export class Anatomy3D {
     const basis = new THREE.Matrix4().makeBasis(L, D, E).setPosition(o[0], o[1], o[2]);
     this.probe.matrix.copy(basis);
 
-    if (!this.usTex) {
+    if (!this.usTex || this.usTex.image !== us) {
+      this.usTex?.dispose();
       this.usTex = new THREE.CanvasTexture(us);
       this.usTex.colorSpace = THREE.SRGBColorSpace;
+      this.fanKey = null;
     }
     const fk = `${kind}|${depthCm}|${topCm}|${usAspect.toFixed(3)}`;
     if (this.fanKey !== fk) {

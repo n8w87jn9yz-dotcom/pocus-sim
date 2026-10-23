@@ -29,12 +29,12 @@ Das Handy braucht **HTTPS**, sonst liefert der Browser keine Sensordaten. Am ein
 
 1. Am Laptop die Pages-Adresse öffnen.
 2. QR-Code mit dem Handy scannen (iPhone oder Android).
-3. Handy hochkant halten: Unterkante = Schallkopffläche, Bildschirm zu dir, linke Kante = Marker.
+3. Handy kopfüber halten: Oberkante = Schallkopffläche (zeigt auf den Patienten), linke Handykante = Marker (links im Bild). Das Handy zeigt das genauso als Schallkopf-Bild.
 4. Fenster am Laptop wählen, Sonde in Standardlage aufsetzen (Phantom, Partner oder in der Luft) und am Handy „Kalibrieren“ tippen.
    Der erste Tipp startet die Sensoren, das iPhone fragt dabei nach Erlaubnis.
 
 ### Verschieben mit der Maus-Sonde
-1. Eine Funkmaus (optisch oder Laser, am Laptop verbunden) mit Gummiband oder Klett unter die Unterkante des Handys binden.
+1. Eine Funkmaus (optisch oder Laser, am Laptop verbunden) mit Gummiband oder Klett hinten an die Oberkante des Handys binden.
    Maus vorn zeigt von dir weg, also in Richtung Handyrückseite. Sitzt sie anders, am Laptop bei „Maus“ die Drehung wählen.
 2. Am Laptop „Maus-Sonde starten“ (oder Taste M). Der Mauszeiger verschwindet, Esc beendet. Den Trackpad dabei nicht berühren.
 3. Sonde am Fenster ansetzen und am Handy „Kalibrieren“. Ab dann folgt das Schnittbild dem Gleiten über Shirt, Handtuch oder Phantom.
@@ -52,9 +52,8 @@ Unter „Webcam (alt)“: `print.html` mit 100 % drucken, Marker hinten unten au
 die Handyrückseite sieht. Funktioniert praktisch nur, wenn das Handy aufrecht steht, also eher an der Lunge.
 
 ### Anatomie und Einfärbung
-„Anatomie im Schnitt“ zeigt rechts neben dem Bild dieselbe Schnittebene in Gewebefarben mit Beschriftung,
-„3D-Anatomie“ ein drehbares 3D-Modell des Körpers mit Sonde und mitbewegter Schallebene, auf der das Ultraschallbild
-liegt. Die Organe sind aus demselben CT berechnet wie das Bild und sitzen deshalb exakt dort, wo die Sonde schallt.
+„3D-Anatomie“ zeigt rechts ein drehbares 3D-Modell des Körpers mit Sonde und mitbewegter Schallebene. Die Ebene zeigt
+wahlweise den Anatomie-Schnitt mit Beschriftung (Standard) oder das Ultraschallbild. Die Organe sind aus demselben CT berechnet wie das Bild und sitzen deshalb exakt dort, wo die Sonde schallt.
 Mit der Maus drehen (Ziehen), zoomen (Mausrad), verschieben (rechte Taste); über einem Organ erscheint sein Name.
 „Ansicht zurücksetzen“ lässt die Kamera wieder der Sonde folgen. „Organe einfärben“ tönt Organe im Ultraschallbild leicht und beschriftet sie.
 

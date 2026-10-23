@@ -7,13 +7,20 @@ export const PROBES = {
 };
 
 // vol/key verweisen auf data/<vol>/meta.json -> windows[key]
+// hold: Halte-Hinweis beim Fensterwechsel (Ort, Schallrichtung, Marker), passend zu den Achsen in meta.json
 export const WINDOWS = [
-  { name: 'RUQ (Morison)', hint: 'convex', vol: 'abdomen', key: 'ruq' },
-  { name: 'LUQ (splenorenal)', hint: 'convex', vol: 'abdomen', key: 'luq' },
-  { name: 'Subxiphoidal', hint: 'phased', vol: 'thorax', key: 'subxiphoid' },
-  { name: 'Becken (suprapubisch)', hint: 'convex', vol: 'abdomen', key: 'pelvis' },
-  { name: 'Lunge rechts', hint: 'linear', vol: 'thorax', key: 'lung_r' },
-  { name: 'Lunge links', hint: 'linear', vol: 'thorax', key: 'lung_l' },
+  { name: 'RUQ (Morison)', hint: 'convex', vol: 'abdomen', key: 'ruq',
+    hold: ['Rechte Flanke, mittlere Axillarlinie, Höhe Rippenbogen', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf'] },
+  { name: 'LUQ (splenorenal)', hint: 'convex', vol: 'abdomen', key: 'luq',
+    hold: ['Linke Flanke, hintere Axillarlinie, etwas höher als rechts', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf'] },
+  { name: 'Subxiphoidal', hint: 'phased', vol: 'thorax', key: 'subxiphoid',
+    hold: ['Direkt unter dem Schwertfortsatz', 'Schall nach hinten, leicht Richtung Kopf', 'Marker zur rechten Patientenseite'] },
+  { name: 'Becken (suprapubisch)', hint: 'convex', vol: 'abdomen', key: 'pelvis',
+    hold: ['Knapp über dem Schambein, quer', 'Schall nach hinten, leicht Richtung Füße', 'Marker zur rechten Patientenseite'] },
+  { name: 'Lunge rechts', hint: 'linear', vol: 'thorax', key: 'lung_r',
+    hold: ['Rechts vorn, 2.–3. Zwischenrippenraum, Medioklavikularlinie', 'Schall senkrecht nach hinten', 'Marker zum Kopf'] },
+  { name: 'Lunge links', hint: 'linear', vol: 'thorax', key: 'lung_l',
+    hold: ['Links vorn, 2.–3. Zwischenrippenraum, Medioklavikularlinie', 'Schall senkrecht nach hinten', 'Marker zum Kopf'] },
 ];
 
 // Bit pro Befund, passt zu uCase im Shader
@@ -112,11 +119,11 @@ export function rotX(a) { const c = Math.cos(a), s = Math.sin(a); return [[1, 0,
 export function rotY(a) { const c = Math.cos(a), s = Math.sin(a); return [[c, 0, s], [0, 1, 0], [-s, 0, c]]; }
 export function rotZ(a) { const c = Math.cos(a), s = Math.sin(a); return [[c, -s, 0], [s, c, 0], [0, 0, 1]]; }
 
-// Handy hochkant, Unterkante = Schallkopffläche, Bildschirm zum Untersucher.
-// Geräteachsen: x = lateral, -y = Tiefe, z = Elevation. Szene: y zeigt in die Tiefe.
+// Handy kopfüber, Oberkante = Schallkopffläche, linke Handykante = Marker (links im Bild).
+// Geräteachsen: x = lateral, +y = Tiefe, -z = Elevation. Szene: y zeigt in die Tiefe.
 // Aus der Kalibrierlage Rn und der aktuellen Lage Rc wird die Sondenlage in der Szene.
 export function probeMatrix(Rn, Rc) {
   const Rrel = matMul(matT(Rn), Rc);
-  const s = [1, -1, 1];
+  const s = [1, 1, -1];
   return Rrel.map((r, i) => r.map((v, j) => s[i] * v * s[j]));
 }

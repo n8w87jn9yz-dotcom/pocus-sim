@@ -11,6 +11,7 @@ let probe = 'convex';
 // NFC-Tag-Adresse (probe.html?s=… oder ?w=…), wird nach dem Verbinden an den Rechner geschickt
 const params = new URLSearchParams(location.search);
 let pendingTag = tagFrom(params);
+if (pendingTag) { try { localStorage.setItem('pocus-nfc', '1'); } catch { /* kein Speicher */ } }
 
 function tagFrom(p) {
   const s = p.get('s'), w = p.get('w');
@@ -66,18 +67,26 @@ function connect(code) {
 }
 
 // ---------- Schallkopf-Anzeige ----------
-const SHAPES = {
-  linear: 'M40 150 h120 v80 q0 10 -10 10 h-100 q-10 0 -10 -10 z',
-  convex: 'M45 140 h110 v70 q-55 45 -110 0 z',
-  phased: 'M70 150 h60 v80 q0 10 -10 10 h-40 q-10 0 -10 -10 z',
+// Gehäuse verbreitert sich zur Schallfläche bei y = 400, das SVG dreht es dann nach oben. w = halbe Breite des Kopfs.
+const HEADS = {
+  linear: { w: 82, lens: 'M18 352 h164 v36 q0 10 -10 10 h-144 q-10 0 -10 -10 z' },
+  convex: { w: 78, lens: 'M22 350 h156 q2 28 -14 40 q-64 18 -128 0 q-16 -12 -14 -40 z' },
+  phased: { w: 46, lens: 'M54 352 h92 v38 q0 8 -8 8 h-76 q-8 0 -8 -8 z' },
 };
 function showProbe(key) {
   probe = key;
-  $('probeShape').setAttribute('d', `M60 20 h80 l15 120 h-110 z ${SHAPES[key]}`);
-  const left = { linear: 40, convex: 45, phased: 70 }[key];
-  $('probeMarker').setAttribute('cx', left - 14);
-  $('probeMarker').setAttribute('cy', 200);
+  const { w, lens } = HEADS[key];
+  const l = 100 - w, r = 100 + w;
+  $('probeBody').setAttribute('d',
+    `M78 84 H122 Q130 84 132 94 L136 184 Q140 250 ${r} 300 L${r} 354 L${l} 354 L${l} 300 Q60 250 64 184 L68 94 Q70 84 78 84 Z`);
+  $('probeGrip').setAttribute('d', 'M74 100 H126 L129 148 Q100 156 71 148 Z');
+  $('probeLens').setAttribute('d', lens);
+  $('probeMarker').setAttribute('transform', `translate(${r + 1} 318)`);   // nach der Drehung links
+  // Marker liegt nach der Drehung an der linken Kante bei y ≈ 60…82
+  $('markerLabel').setAttribute('x', l + 4);
+  $('markerLabel').setAttribute('y', 75);
   $('probeName').textContent = `${PROBES[key].name} · ${PROBES[key].mhz} MHz`;
+  for (const b of document.querySelectorAll('#probeTypes button')) b.classList.toggle('active', b.dataset.key === key);
 }
 
 // ---------- Sensoren ----------
@@ -110,7 +119,10 @@ async function startSensors() {
     return false;
   }
   lockScreen();
-  startNfc();
+  // NFC ist experimentell: nur wenn das Handy schon einmal über einen Tag geöffnet wurde
+  let nfc = false;
+  try { nfc = localStorage.getItem('pocus-nfc') === '1'; } catch { /* kein Speicher */ }
+  if (nfc) startNfc();
   return true;
 }
 
@@ -134,23 +146,27 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Erster Tipp startet die Sensoren (iPhone fragt dabei nach), jeder Tipp übernimmt die aktuelle Haltung als Standardlage
-$('calibBtn').addEventListener('click', async () => {
+async function calibrate() {
   if (!sensorsOn && !(await startSensors())) return;
   send({ t: 'calib' });
-  $('calibBtn').textContent = 'Kalibriert ✓';
-  setTimeout(() => { $('calibBtn').textContent = 'Kalibrieren'; }, 1200);
-});
+  $('calibBtn').classList.add('on');
+  $('calibText').textContent = 'Kalibriert ✓';
+  setTimeout(() => { $('calibText').textContent = 'Kalibrieren'; }, 1200);
+}
+$('calibBtn').addEventListener('pointerdown', e => e.stopPropagation());
+$('calibBtn').addEventListener('click', calibrate);
 
-$('probeView').addEventListener('click', () => {
-  const keys = Object.keys(PROBES);
-  const next = keys[(keys.indexOf(probe) + 1) % keys.length];
-  showProbe(next);
-  send({ t: 'probe', v: next });
-});
+for (const [key, p] of Object.entries(PROBES)) {
+  const b = document.createElement('button');
+  b.textContent = p.name;
+  b.dataset.key = key;
+  b.addEventListener('click', () => { showProbe(key); send({ t: 'probe', v: key }); });
+  $('probeTypes').append(b);
+}
 
-// Wischfeld: Ersatz für die Maus-Sonde, Bewegung wird gesammelt und gebündelt geschickt
+// Wischen auf dem Gehäuse verschiebt die Sonde, Bewegung wird gesammelt und gebündelt geschickt
 let swipe = null, swipeSum = [0, 0], swipeTimer = 0;
-const pad = $('swipePad');
+const pad = $('probeView');
 pad.addEventListener('pointerdown', e => { swipe = [e.clientX, e.clientY]; pad.setPointerCapture(e.pointerId); });
 pad.addEventListener('pointermove', e => {
   if (!swipe) return;

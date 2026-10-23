@@ -15,17 +15,26 @@
         <canvas id="us"></canvas>
         <canvas id="overlay"></canvas>
         <p class="loading" id="loading" hidden>Lade CT …</p>
+        <div class="hold-tip" id="holdTip" hidden>
+          <h3 id="holdTitle"></h3>
+          <ul id="holdList"></ul>
+          <p class="small">Handy kopfüber: <b>Oberkante</b> ist die Schallfläche, die linke Handykante mit dem grünen Marker zeigt in Markerrichtung. So aufsetzen und am Handy den Einschaltknopf drücken.</p>
+          <div class="buttons"><button id="holdOk" class="active">OK</button><button id="holdOff">Nicht mehr anzeigen</button></div>
+        </div>
       </div>
       <div class="anat-wrap" id="anatWrap" hidden>
-        <canvas id="anat"></canvas>
         <canvas id="anat3d" hidden></canvas>
         <details class="anat3d-tools" id="anat3dTools" hidden>
           <summary>Ebenen</summary>
           <div class="layers" id="layerList"></div>
-          <label class="check"><input type="checkbox" id="fanToggle" checked> Schallebene</label>
           <button id="viewReset" title="Kamera wieder der Sonde folgen lassen">Ansicht zurücksetzen</button>
         </details>
         <p class="anat-title" id="anatTitle"></p>
+        <div class="fan-src buttons" id="fanSrc" hidden title="Was die Schallebene im 3D-Modell zeigt">
+          <button data-src="anat" class="active">Ebene: Anatomie</button>
+          <button data-src="us">Ultraschall</button>
+          <button data-src="off">Aus</button>
+        </div>
       </div>
     </div>
     <div class="readout" id="readout"></div>
@@ -50,10 +59,10 @@
       <h2>Ansicht</h2>
       <div class="buttons" id="anatButtons">
         <button data-mode="off">Nur Ultraschall</button>
-        <button data-mode="cut">+ Anatomie im Schnitt</button>
         <button data-mode="body">+ 3D-Anatomie</button>
       </div>
       <label class="check"><input type="checkbox" id="tint"> Organe einfärben und beschriften</label>
+      <label class="check"><input type="checkbox" id="holdToggle"> Halte-Hinweis bei jedem Fenster</label>
     </section>
 
     <section class="card">
@@ -78,24 +87,6 @@
       </div>
     </section>
 
-    <section class="card">
-      <h2>Sonde verschieben (Maus-Sonde)</h2>
-      <p class="small">Funkmaus unten ans Handy binden, Maus vorn weg von dir, und über Shirt, Handtuch oder Phantom gleiten lassen. Ohne Maus: auf dem Handy im Wischfeld wischen.</p>
-      <button id="mouseBtn">Maus-Sonde starten</button>
-      <p class="small" id="mouseStatus"></p>
-      <label class="slider" title="Wie die Maus am Handy sitzt: 0° = Maus vorn zeigt von dir weg">Maus <select id="mouseTurn"><option value="0">0° gedreht</option><option value="90">90° gedreht</option><option value="180">180° gedreht</option><option value="270">270° gedreht</option></select><span></span></label>
-      <label class="slider" title="Größe von Puppe oder Partner im Vergleich zum CT-Körper">Größe <input type="range" id="bodyScale" min="40" max="130" step="5" value="100"><span id="bodyScaleVal">100 %</span></label>
-      <details>
-        <summary class="small">Webcam (alt)</summary>
-        <p class="small">Marker hinten unten aufs Handy kleben (<a href="print.html" target="_blank">Marker drucken</a>). Laptop so stellen, dass die Webcam die Handyrückseite sieht.</p>
-        <button id="camBtn">Webcam starten</button>
-        <div id="camBox" hidden>
-          <video id="camVideo" playsinline muted hidden></video>
-          <canvas id="camPreview" class="cam-preview"></canvas>
-          <p class="small" id="camStatus">Starte Webcam …</p>
-        </div>
-      </details>
-    </section>
 
     <section class="card">
       <h2>Befunde</h2>
@@ -107,6 +98,33 @@
       </div>
     </section>
 
+    <section class="card">
+      <h2>Sonde verschieben</h2>
+      <p class="small">Auf der Sonde am Handy wischen wie auf einem Touchpad: seitlich = entlang der Sonde, nach unten = zu dir hin.</p>
+      <label class="slider" title="Größe von Puppe oder Partner im Vergleich zum CT-Körper">Größe <input type="range" id="bodyScale" min="40" max="130" step="5" value="100"><span id="bodyScaleVal">100 %</span></label>
+    </section>
+
+    <details class="card experimental">
+      <summary>Experimentell</summary>
+      <h3>Maus-Sonde</h3>
+      <p class="small">Funkmaus unten ans Handy binden, Maus vorn weg von dir, und über Shirt, Handtuch oder Phantom gleiten lassen. Ohne Maus: auf dem Handy im Wischfeld wischen.</p>
+      <button id="mouseBtn">Maus-Sonde starten</button>
+      <p class="small" id="mouseStatus"></p>
+      <label class="slider" title="Wie die Maus am Handy sitzt: 0° = Maus vorn zeigt von dir weg">Maus <select id="mouseTurn"><option value="0">0° gedreht</option><option value="90">90° gedreht</option><option value="180">180° gedreht</option><option value="270">270° gedreht</option></select><span></span></label>
+      <details>
+        <summary class="small">Webcam (alt)</summary>
+        <p class="small">Marker hinten unten aufs Handy kleben (<a href="print.html" target="_blank">Marker drucken</a>). Laptop so stellen, dass die Webcam die Handyrückseite sieht.</p>
+        <button id="camBtn">Webcam starten</button>
+        <div id="camBox" hidden>
+          <video id="camVideo" playsinline muted hidden></video>
+          <canvas id="camPreview" class="cam-preview"></canvas>
+          <p class="small" id="camStatus">Starte Webcam …</p>
+        </div>
+      </details>
+      <h3>NFC-Tags</h3>
+      <p class="small">Diese Adressen mit einer NFC-App (z. B. „NFC Tools“) als URL auf Tags schreiben. Handy an den Tag halten: Fälle werden verdeckt geladen, Fenster-Tags wählen das Schallfenster. Das Handy muss vorher einmal gekoppelt gewesen sein.</p>
+      <ul class="tag-list" id="tagList"></ul>
+    </details>
     <details class="card">
       <summary>NFC-Tags</summary>
       <p class="small">Diese Adressen mit einer NFC-App (z. B. „NFC Tools“) als URL auf Tags schreiben. Handy an den Tag halten: Fälle werden verdeckt geladen, Fenster-Tags wählen das Schallfenster. Das Handy muss vorher einmal gekoppelt gewesen sein.</p>
@@ -115,9 +133,9 @@
 
     <details class="card help">
       <summary>Bedienung</summary>
-      <p>Handy hochkant halten, die <b>Unterkante</b> ist die Schallkopffläche, der Bildschirm zeigt zu dir. Die linke Handykante ist die Markerseite (links im Bild).</p>
+      <p>Handy kopfüber halten, die <b>Oberkante</b> ist die Schallkopffläche. Die linke Handykante ist die Markerseite (links im Bild), das Handy zeigt sie grün an.</p>
       <p><b>Kalibrieren:</b> Schallfenster hier am Rechner wählen, Sonde in Standardlage aufsetzen (Phantom, Partner oder in der Luft) und am Handy „Kalibrieren“ tippen. Ab dann folgt das Bild der Bewegung.</p>
-      <p><b>Verschieben mit der Maus-Sonde:</b> Funkmaus mit Gummiband oder Klett unter die Unterkante des Handys, Maus vorn zeigt von dir weg (sonst bei „Maus“ die Drehung einstellen). „Maus-Sonde starten“ (oder Taste M), dann Sonde ansetzen und am Handy „Kalibrieren“. Die Maus misst das Gleiten, das Handy die Drehung. Den Laptop-Trackpad dabei nicht berühren, Esc beendet. Einmal einmessen: Taste E, Sonde genau 10 cm am Lineal schieben, nochmal E. „Größe“ gleicht Puppe oder Partner an den CT-Körper an.</p>
+      <p><b>Verschieben mit der Maus-Sonde:</b> Funkmaus mit Gummiband oder Klett hinten an die Oberkante des Handys, Maus vorn zeigt von dir weg (sonst bei „Maus“ die Drehung einstellen). „Maus-Sonde starten“ (oder Taste M), dann Sonde ansetzen und am Handy „Kalibrieren“. Die Maus misst das Gleiten, das Handy die Drehung. Den Laptop-Trackpad dabei nicht berühren, Esc beendet. Einmal einmessen: Taste E, Sonde genau 10 cm am Lineal schieben, nochmal E. „Größe“ gleicht Puppe oder Partner an den CT-Körper an.</p>
       <p><b>Ohne Maus:</b> Im Wischfeld am Handy wischen wie auf einem Touchpad: seitlich = entlang der Sonde, nach unten = zu dir hin.</p>
       <p>Standardlagen: RUQ/LUQ koronal in der Axillarlinie, Marker kranial. Subxiphoidal flach unter dem Xiphoid, Richtung linke Schulter, Marker rechts. Becken transversal suprapubisch, Marker rechts. Lunge sagittal 2. ICR medioklavikulär, Marker kranial.</p>
       <p>Ohne Handy: Ziehen im Bild = Kippen und Fächern, mit Umschalttaste = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, Tasten 1–6 = Fenster, L/K/S = Schallkopf, F = Freeze, N = Neutralstellung, A = Anatomieansicht, T = Organe einfärben, M = Maus-Sonde.</p>
