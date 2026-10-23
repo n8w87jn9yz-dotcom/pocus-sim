@@ -40,9 +40,10 @@ const aPos = gl.getAttribLocation(prog, 'aPos');
 gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 const U = {};
-for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot']) U[n] = gl.getUniformLocation(prog, n);
+for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug']) U[n] = gl.getUniformLocation(prog, n);
 
 // Interne Auflösung bewusst niedrig, das Bild wird per CSS skaliert (?h=300 für schwache Rechner)
+const DEBUG = new URLSearchParams(location.search).has('debug');
 const RENDER_H = +new URLSearchParams(location.search).get('h') || 460;
 function resize() {
   const wrap = $('usWrap');
@@ -67,10 +68,71 @@ function currentMatrix() {
   return matMul(matMul(rotY(m.rot), rotX(m.fan)), rotZ(m.rock));
 }
 
+// ---------- CT-Volumen ----------
+const volumes = {};
+let loadingVol = null;
+
+async function fetchVolume(name) {
+  const meta = await (await fetch(`data/${name}/meta.json`)).json();
+  let buf = new Uint8Array(await (await fetch(`data/${name}/vol.bin.gz`)).arrayBuffer());
+  // Manche Server entpacken .gz bereits selbst, dann fehlt die gzip-Signatur
+  if (buf[0] === 0x1f && buf[1] === 0x8b) {
+    const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+    buf = new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  const [dx, dy, dz] = meta.dims;
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, tex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8UI, dx, dy, dz, 0, gl.RGBA_INTEGER, gl.UNSIGNED_BYTE, buf);
+  for (const p of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_3D, p, gl.NEAREST);
+  return { meta, data: buf, tex };
+}
+
+function currentVolume() {
+  const name = WINDOWS[state.win].vol;
+  if (volumes[name]) return volumes[name];
+  if (loadingVol !== name) {
+    loadingVol = name;
+    $('loading').hidden = false;
+    fetchVolume(name)
+      .then(v => { volumes[name] = v; $('loading').hidden = true; })
+      .catch(err => { $('loading').textContent = `CT konnte nicht geladen werden: ${err.message}`; });
+  }
+  return null;
+}
+
+function classAt(vol, p) {
+  const [dx, dy, dz] = vol.meta.dims, s = vol.meta.spacing;
+  const x = Math.floor(p[0] / s), y = Math.floor(p[1] / s), z = Math.floor(p[2] / s);
+  if (x < 0 || y < 0 || z < 0 || x >= dx || y >= dy || z >= dz) return 0;
+  return vol.data[4 * (x + dx * (y + dy * z))];
+}
+
+// Sondenursprung: Fensterpunkt plus Verschiebung, dann zurück auf die Haut gelegt
+function probeOrigin(vol, w) {
+  const add = (a, b, k) => a.map((v, i) => v + b[i] * k);
+  let p = add(add(w.origin, w.L, state.slide[0] * 10), w.E, state.slide[1] * 10);
+  p = add(p, w.D, 40);
+  for (let i = 0; i < 160 && classAt(vol, p) !== 0; i++) p = add(p, w.D, -1);
+  return add(p, w.D, 1);
+}
+
 let lastM = currentMatrix();
 function render() {
-  const M = lastM;
   gl.viewport(0, 0, usCanvas.width, usCanvas.height);
+  const vol = currentVolume();
+  if (!vol) { gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
+  const w = vol.meta.windows[WINDOWS[state.win].key];
+  const B = [0, 1, 2].map(r => [w.L[r], w.D[r], w.E[r]]);
+  const M = matMul(B, lastM);
+  const o = probeOrigin(vol, w);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_3D, vol.tex);
+  gl.uniform1i(U.uVol, 0);
+  gl.uniform3f(U.uDims, ...vol.meta.dims);
+  gl.uniform1f(U.uSpacing, vol.meta.spacing);
+  gl.uniform1i(U.uDebug, DEBUG ? 1 : 0);
   gl.uniform2f(U.uRes, usCanvas.width, usCanvas.height);
   gl.uniform1f(U.uDepth, state.depth);
   gl.uniform1f(U.uGain, state.gain);
@@ -79,11 +141,11 @@ function render() {
   gl.uniform1i(U.uProbe, PROBES[state.probe].id);
   gl.uniform1i(U.uWin, state.win);
   gl.uniform1i(U.uCase, state.cases);
-  gl.uniform3f(U.uOrigin, state.slide[0], 0, state.slide[1]);
+  gl.uniform3f(U.uOrigin, ...o);
   // spaltenweise: lateral, Tiefe, Elevation
   gl.uniformMatrix3fv(U.uRot, false, [M[0][0], M[1][0], M[2][0], M[0][1], M[1][1], M[2][1], M[0][2], M[1][2], M[2][2]]);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-  drawOverlay(M);
+  drawOverlay(lastM);
 }
 
 function drawOverlay(M) {
@@ -264,7 +326,7 @@ function bindMouse() {
 }
 
 function slide(dx, dz) {
-  state.slide = [Math.max(-5, Math.min(5, state.slide[0] + dx)), Math.max(-5, Math.min(5, state.slide[1] + dz))];
+  state.slide = [Math.max(-8, Math.min(8, state.slide[0] + dx)), Math.max(-8, Math.min(8, state.slide[1] + dz))];
 }
 
 // ---------- Kopplung mit dem Handy (WebRTC über PeerJS) ----------
@@ -277,6 +339,7 @@ function onData(m) {
     case 'gain': state.gain = Math.max(0.3, Math.min(3, state.gain + m.d)); syncUI(); break;
     case 'freeze': state.frozen = !state.frozen; syncUI(); break;
     case 'calib': calibrate(); break;
+    case 'anchor': if (WINDOWS[m.v]) { setWindow(m.v); calibrate(); } break;
     case 'slide': slide(m.dx, m.dz); break;
     case 'hello': sendState(); break;
   }

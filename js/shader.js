@@ -1,7 +1,6 @@
-// Fragment-Shader: erzeugt das B-Bild aus einer prozeduralen Anatomie.
-// Szenenkoordinaten in cm: x = lateral (Markerseite negativ), y = Tiefe ab Haut, z = Elevation.
-// Pro Pixel wird der Schallstrahl von der Sonde bis zum Bildpunkt abgetastet
-// (Dämpfung, Schallschatten hinter Knochen, Reverberation hinter Gas).
+// Fragment-Shader: berechnet das B-Bild aus einem CT-Volumen (siehe tools/build_volume.py).
+// Volumen-Koordinaten in mm (RAS). Pro Pixel wird der Schallstrahl von der Sonde bis zum Bildpunkt
+// abgetastet: Dämpfung, Schallschatten hinter Knochen, Reverberation oder Spiegelbild hinter Gas.
 
 export const VERT = `#version 300 es
 in vec2 aPos;
@@ -9,15 +8,20 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
 
 export const FRAG = `#version 300 es
 precision highp float;
+precision highp usampler3D;
+uniform usampler3D uVol;
+uniform vec3 uDims;
+uniform float uSpacing;
 uniform vec2 uRes;
 uniform float uDepth, uGain, uTime, uTop;
-uniform int uProbe, uWin, uCase;
-uniform vec3 uOrigin;
-uniform mat3 uRot;
+uniform int uProbe, uWin, uCase, uDebug;
+uniform vec3 uOrigin;   // Sondenmitte auf der Haut, mm
+uniform mat3 uRot;      // Spalten: lateral, Tiefe, Elevation (Welt)
 out vec4 outColor;
 
-struct Tis { float e; float a; int b; }; // Echogenität, Dämpfung, 0 Gewebe / 1 Knochen / 2 Gas / 3 Luft
-Tis T(float e, float a, int b){ Tis t; t.e = e; t.a = a; t.b = b; return t; }
+// Gewebeklassen wie in tools/build_volume.py
+const int AIR = 0, GAS = 1, FAT = 2, SOFT = 3, LIVER = 4, SPLEEN = 5, KIDNEY = 6, SINUS = 7, BLOOD = 8,
+          HEART = 9, BONE = 10, BOWEL = 11, FLUID = 12, SKIN = 13, MUSCLE = 14, CARTILAGE = 15;
 
 float hash(vec3 p){ p = fract(p*0.3183099 + vec3(.1,.2,.3)); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float vnoise(vec3 x){
@@ -25,134 +29,70 @@ float vnoise(vec3 x){
   return mix(mix(mix(hash(i), hash(i+vec3(1,0,0)), f.x), mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
              mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x), mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
 }
-float sdE(vec3 p, vec3 r){ float k0 = length(p/r); float k1 = length(p/(r*r)); return k0*(k0-1.0)/max(k1, 1e-4); }
 float breath(){ return sin(uTime*6.2832/4.0); }
 float systole(){ float ph = fract(uTime/0.9); return smoothstep(0.0,0.15,ph)*(1.0-smoothstep(0.35,0.6,ph)); }
-float tex(vec3 p, float s){ return 0.6 + 0.8*vnoise(p*s); }
 
-// Brustwand/Bauchwand: Haut, Fett mit Septen, Muskel
-Tis wall(vec3 p){
-  float y = p.y;
-  if (y < -1.0) return T(0.0, 0.0, 3);
-  if (y < 0.2) return T(0.7, 0.6, 0);
-  if (y < 1.1) return T(0.15 + 0.55*step(0.86, vnoise(p*vec3(1.5,9.0,1.5))), 0.6, 0);
-  if (y < 1.2) return T(0.8, 0.6, 0);
-  if (y < 2.0) return T(0.36 + 0.16*sin(y*28.0 + vnoise(p*2.0)*3.0), 0.9, 0);
-  if (y < 2.1) return T(0.75, 0.6, 0);
-  return T(0.42*tex(p, 0.5), 0.7, 0);
+// Atemverschiebung der Bauchorgane (nicht der Bauchwand) entlang der Körperlängsachse
+vec3 moved(vec3 p, float depthMm){
+  if (uWin > 1) return p;
+  return p + vec3(0.0, 0.0, breath()*7.0*smoothstep(15.0, 35.0, depthMm));
 }
 
-Tis liverTex(vec3 bp, float dL){
-  float pv = min(min(length(bp.xy-vec2(-3.0,6.5)), length(bp.xy-vec2(0.5,9.0))), length(bp.xy-vec2(-5.0,9.5)));
-  if (pv < 0.45) return T(0.02, 0.05, 0);
-  if (pv < 0.58) return T(0.9, 0.6, 0);
-  if (dL > -0.07) return T(0.85, 0.6, 0);
-  return T(0.5*tex(bp, 0.9), 0.55, 0);
+uvec4 voxel(vec3 p){
+  vec3 g = p/uSpacing + (vec3(hash(p*3.1), hash(p*5.7+1.0), hash(p*7.3+2.0)) - 0.5)*1.3; // Dithering glättet Kanten
+  ivec3 i = ivec3(floor(g));
+  if (any(lessThan(i, ivec3(0))) || any(greaterThanEqual(i, ivec3(uDims)))) return uvec4(0u);
+  return texelFetch(uVol, i, 0);
 }
 
-Tis kidneyTex(vec3 kp, float dK, float dS){
-  if (dK > -0.08) return T(0.9, 0.6, 0);
-  if (dS < 0.0) return T(0.8*tex(kp, 2.0), 0.6, 0);
-  return T(0.36, 0.6, 0);
+int classOf(uvec4 v){
+  int c = int(v.r);
+  if ((int(v.a) & uCase) != 0 && c != BONE) c = FLUID;   // freie Flüssigkeit / Erguss
+  if (c == HEART && float(v.b)*0.5 > 6.0 + 4.0*systole()) c = BLOOD; // Kammern schlagen mit
+  return c;
 }
 
-Tis ruq(vec3 p, bool fluid){
-  Tis t = wall(p);
-  if (t.b == 3) return t;
-  if (length(p.xy-vec2(-3.4,1.9)) < 0.7 || length(p.xy-vec2(3.6,1.9)) < 0.7) return T(1.0, 4.0, 1);
-  if (p.y < 2.1) return t;
-  vec3 bp = p; bp.x += breath()*0.6;
-  float dL = sdE(bp-vec3(-1.0,7.5,0.0), vec3(7.5,5.5,7.0));
-  float dD = length(bp-vec3(-11.0,9.0,0.0)) - 6.5;
-  vec3 kp = bp-vec3(4.0,10.0,0.0); kp.xy = mat2(0.94,-0.34,0.34,0.94)*kp.xy;
-  float dK = sdE(kp, vec3(4.5,2.2,2.6));
-  float dS = sdE(kp, vec3(2.6,0.9,1.3));
-  if (abs(dD) < 0.18 && dL < 1.0) return T(1.0, 0.6, 0);
-  if (dD < 0.0) return T(0.3*tex(bp, 0.6), 0.6, 0);                 // Spiegelartefakt über dem Zwerchfell
-  if (fluid && dK > 0.0 && dK < 0.8 && dL < 0.6 && kp.y < 0.6) return T(0.0, 0.05, 0); // freie Flüssigkeit im Morison-Pouch
-  if (dK < 0.0) return kidneyTex(kp, dK, dS);
-  if (dL < 0.0) return liverTex(bp, dL);
-  return T(0.42*tex(bp, 0.5), 0.7, 0);
+float atten(int c){
+  if (c == FLUID) return 0.05;
+  if (c == BLOOD) return 0.15;
+  if (c == FAT) return 0.6;
+  if (c == MUSCLE) return 0.9;
+  if (c == LIVER || c == SPLEEN) return 0.55;
+  if (c == CARTILAGE) return 0.5;
+  return 0.7;
 }
 
-Tis luq(vec3 p, bool fluid){
-  Tis t = wall(p);
-  if (t.b == 3) return t;
-  if (length(p.xy-vec2(-3.0,1.9)) < 0.7 || length(p.xy-vec2(3.2,1.9)) < 0.7) return T(1.0, 4.0, 1);
-  if (p.y < 2.1) return t;
-  vec3 bp = p; bp.x += breath()*0.5;
-  float dSp = sdE(bp-vec3(-2.0,5.8,0.0), vec3(5.0,3.0,4.0));
-  float dD = length(bp-vec3(-10.0,6.5,0.0)) - 6.0;
-  vec3 kp = bp-vec3(3.5,9.0,0.0); kp.xy = mat2(0.94,0.34,-0.34,0.94)*kp.xy;
-  float dK = sdE(kp, vec3(4.3,2.1,2.5));
-  float dS = sdE(kp, vec3(2.5,0.85,1.2));
-  if (abs(dD) < 0.18 && dSp < 1.5) return T(1.0, 0.6, 0);
-  if (dD < 0.0) return T(0.28*tex(bp, 0.6), 0.6, 0);
-  if (fluid && dK > 0.0 && ((dSp > 0.0 && dSp < 0.7 && bp.y > 5.0) || (dD > 0.0 && dD < 0.6 && dSp < 1.0))) return T(0.0, 0.05, 0); // splenorenal / subphrenisch
-  if (dSp < 0.0) return T(dSp > -0.07 ? 0.85 : 0.52*tex(bp, 1.0), 0.55, 0);
-  if (dK < 0.0) return kidneyTex(kp, dK, dS);
-  return T(0.42*tex(bp, 0.5), 0.7, 0);
+int blocker(int c){ return c == BONE ? 1 : (c == GAS ? 2 : (c == AIR ? 3 : 0)); }
+
+float echo(int c, vec3 p){
+  float n = vnoise(p*0.09);
+  if (c == FAT) return 0.14 + 0.5*step(0.84, vnoise(p*vec3(0.15,0.15,0.9)));
+  if (c == SOFT) return 0.42*(0.6+0.8*n);
+  if (c == LIVER) return 0.5*(0.75+0.5*n);
+  if (c == SPLEEN) return 0.55*(0.8+0.4*n);
+  if (c == KIDNEY) return 0.3;
+  if (c == SINUS) return 0.8*(0.6+0.8*vnoise(p*0.3));
+  if (c == BLOOD || c == FLUID) return 0.015;
+  if (c == HEART) return 0.5*(0.7+0.6*n);
+  if (c == BOWEL) return 0.45*(0.5+1.0*vnoise(p*0.2));
+  if (c == SKIN) return 0.75;
+  if (c == MUSCLE) return 0.34*(0.7+0.6*vnoise(p*vec3(0.5,0.5,0.08)));
+  if (c == CARTILAGE) return 0.06;
+  return 0.0;
 }
 
-Tis subx(vec3 p, bool eff){
-  Tis t = wall(p);
-  if (t.b == 3) return t;
-  if (p.y < 2.1) return t;
-  float dLv = sdE(p-vec3(-3.5,3.4,0.0), vec3(8.0,3.0,7.0));
-  if (dLv < 0.0) return T(dLv > -0.07 ? 0.85 : 0.5*tex(p, 0.9), 0.55, 0);
-  vec3 hp = p-vec3(1.5,10.5,0.0); hp.xy = mat2(0.9,0.44,-0.44,0.9)*hp.xy;
-  float dH = sdE(hp, vec3(5.3,3.4,4.0));
-  float dP = dH - (eff ? 0.8 : 0.15);
-  if (abs(dP) < 0.15) return T(1.0, 0.6, 0);                       // Perikard
-  if (eff && dP < 0.0 && dH > 0.0) return T(0.0, 0.05, 0);          // Perikarderguss
-  if (dH < 0.0){
-    float s = systole(), k = 1.0 - 0.14*s, ka = 1.0 + 0.1*s;
-    float rv = sdE(hp-vec3(1.0,-1.6,0.0), vec3(3.4,1.25,2.4)*k);
-    float lv = sdE(hp-vec3(1.3,1.0,0.0), vec3(3.6,1.5,2.4)*k);
-    float ra = sdE(hp-vec3(-3.1,-1.3,0.0), vec3(1.6,1.2,2.0)*ka);
-    float la = sdE(hp-vec3(-3.1,1.4,0.0), vec3(1.6,1.2,2.0)*ka);
-    if (min(min(rv,lv), min(ra,la)) < 0.0) return T(0.02, 0.08, 0);
-    return T(0.55*tex(hp, 1.5), 0.6, 0);
-  }
-  return T(0.42*tex(p, 0.5), 0.7, 0);
+bool similar(int a, int b){
+  bool wa = a == FAT || a == MUSCLE || a == SOFT || a == SKIN;
+  bool wb = b == FAT || b == MUSCLE || b == SOFT || b == SKIN;
+  return a == b || (wa && wb);
 }
 
-Tis pelv(vec3 p, bool fluid){
-  Tis t = wall(p);
-  if (t.b == 3) return t;
-  if (p.y < 2.1) return t;
-  if (length(p.xy-vec2(-7.0,9.5)) < 1.6 || length(p.xy-vec2(7.0,9.5)) < 1.6) return T(1.0, 4.0, 1);
-  float dB = sdE(p-vec3(0.0,5.4,0.0), vec3(4.6,3.0,4.0));
-  float dU = sdE(p-vec3(0.0,9.8,0.0), vec3(3.0,2.0,3.0));
-  if (abs(dB) < 0.12) return T(0.9, 0.6, 0);
-  if (dB < 0.0) return T(0.0, 0.03, 0);
-  if (dU < 0.0) return T(dU > -0.08 ? 0.6 : 0.4*tex(p, 2.0), 0.6, 0);
-  if (fluid && p.y > 7.0 && sdE(p-vec3(0.0,9.4,0.0), vec3(5.5,3.0,4.0)) < 0.0) return T(0.0, 0.05, 0);
-  if (p.y > 11.0 && vnoise(p*0.6) > 0.78) return T(0.9, 0.6, 2);   // Darmgas
-  return T(0.42*tex(p, 0.5), 0.7, 0);
-}
+int classAt(vec3 p){ return classOf(voxel(p)); }
 
-Tis lung(vec3 p){
-  Tis t = wall(p);
-  if (t.b == 3) return t;
-  if (length(vec2(mod(p.x, 4.2)-2.1, p.y-1.15)) < 0.55) return T(1.0, 4.0, 1); // Rippen
-  if (p.y > 1.55) return T(0.9, 0.6, 2);                                     // Pleura, dahinter Luft
-  return t;
-}
-
-Tis tissue(vec3 p){
-  if (uWin == 0) return ruq(p, (uCase & 1) != 0);
-  if (uWin == 1) return luq(p, (uCase & 2) != 0);
-  if (uWin == 2) return subx(p, (uCase & 4) != 0);
-  if (uWin == 3) return pelv(p, (uCase & 8) != 0);
-  return lung(p);
-}
-
-// Grenzfläche zwischen a (davor) und b (Treffer) per Bisektion verfeinern
 float refine(vec3 S, vec3 dir, float a, float b, int kind){
   for (int i = 0; i < 6; i++){
     float m = 0.5*(a+b);
-    if (tissue(S+dir*m).b == kind) b = m; else a = m;
+    if (blocker(classAt(moved(S+dir*m, m))) == kind) b = m; else a = m;
   }
   return b;
 }
@@ -160,7 +100,7 @@ float refine(vec3 S, vec3 dir, float a, float b, int kind){
 void main(){
   vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   float sc = uRes.y / (uDepth + uTop);
-  vec2 ic = vec2((px.x - 0.5*uRes.x)/sc, px.y/sc - uTop);
+  vec2 ic = vec2((px.x - 0.5*uRes.x)/sc, px.y/sc - uTop);   // cm
 
   bool ok; vec2 s2; float len; float mask = 1.0;
   if (uProbe == 0){
@@ -180,58 +120,91 @@ void main(){
   }
   if (!ok){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
 
-  vec3 S = uOrigin + uRot*vec3(s2, 0.0);
-  vec3 P = uOrigin + uRot*vec3(ic, 0.0);
-  vec3 dir = normalize(P - S + vec3(0.0, 1e-5, 0.0));
+  // Konvexe Sonde: Ankopplungsfläche liegt auf der Haut, nicht darüber
+  float lift = uProbe == 1 ? 4.0 - 4.0*cos(atan(s2.x, s2.y + 4.0)) : 0.0;
+  vec3 S = uOrigin + uRot*(vec3(s2.x, s2.y + lift, 0.0)*10.0);
+  vec3 P = uOrigin + uRot*(vec3(ic.x, ic.y + lift, 0.0)*10.0);
+  vec3 dir = normalize(P - S + uRot[1]*1e-4);
+  float L = len*10.0;                      // mm
   float f = uProbe == 0 ? 7.5 : (uProbe == 1 ? 3.5 : 2.5);
 
+  // Die Sonde drückt das Gewebe ein: Strahl beginnt am ersten Körpervoxel (bis 3 cm Luftspalt)
+  float off = 0.0;
+  for (int i = 0; i < 30; i++){
+    if (classAt(S + dir*off) != AIR) break;
+    off += 1.0;
+  }
+  if (off >= 30.0){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  S += dir*off;
+  P += dir*off;
+
+  if (uDebug == 1){
+    int dc = classAt(P);
+    vec3 pal[16] = vec3[16](vec3(0), vec3(0.2,0.2,0.9), vec3(0.9,0.9,0.3), vec3(0.6), vec3(0.6,0.3,0.1), vec3(0.6,0.1,0.5),
+      vec3(0.9,0.5,0.1), vec3(1.0,0.8,0.5), vec3(0.9,0.0,0.0), vec3(0.8,0.3,0.3), vec3(1.0), vec3(0.3,0.7,0.3),
+      vec3(0.0,0.6,0.9), vec3(1.0,0.7,0.7), vec3(0.7,0.2,0.2), vec3(0.4,0.9,0.9));
+    outColor = vec4(pal[dc]*mask, 1.0); return;
+  }
+
   float att = 0.0, boneD = -1.0, gasD = -1.0, prev = 0.0;
-  float stp = max(uDepth/80.0, 0.05);
+  int before = SKIN;
+  float stp = max(uDepth*10.0/90.0, 0.75);
   bool air = false;
-  for (int i = 0; i < 100; i++){
+  for (int i = 0; i < 140; i++){
     float s = (float(i)+0.5)*stp;
-    if (s >= len) break;
-    Tis q = tissue(S + dir*s);
-    if (q.b == 3){ air = true; break; }
-    att += q.a*stp;
-    if (q.b == 1 && boneD < 0.0) boneD = refine(S, dir, prev, s, 1);
-    if (q.b == 2 && gasD < 0.0){ gasD = refine(S, dir, prev, s, 2); break; }
+    if (s >= L) break;
+    int c = classAt(moved(S + dir*s, s));
+    int b = blocker(c);
+    att += atten(c)*stp*0.1;
+    if (b == 1 && boneD < 0.0) boneD = refine(S, dir, prev, s, 1);
+    if (b == 2 && gasD < 0.0){ gasD = refine(S, dir, prev, s, 2); break; }
+    if (b == 0) before = c;
     prev = s;
   }
-  Tis q = tissue(P);
-  if (air || q.b == 3){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  vec3 Pm = moved(P, L);
+  int c = classAt(Pm);
+  if (air){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
 
-  // Dämpfung relativ zur Tiefenausgleichskurve (TGC geht von 0,6 dB/cm/MHz aus)
-  float netDb = 0.6*f*(att - 0.6*min(len, float(100)*stp));
+  float netDb = 0.6*f*(att - 0.6*min(len, 140.0*stp*0.1));
   float amp = pow(10.0, -netDb/20.0) * exp(-len*f*0.012);
 
-  vec3 sp3 = P * (uProbe == 0 ? 22.0 : (uProbe == 1 ? 12.0 : 10.0));
+  vec3 sp3 = Pm * (uProbe == 0 ? 2.2 : (uProbe == 1 ? 1.2 : 1.0));
   float n = 0.65*vnoise(sp3) + 0.35*vnoise(sp3*2.1 + 7.0);
   float speckle = mix(1.0, -log(1.0 - 0.98*n)*1.25, 0.8);
 
-  float e = q.e;
-  if (boneD > 0.0 || q.b == 1){
-    float bd = boneD > 0.0 ? boneD : len;
-    e = (len - bd < 0.25) ? 1.25 : 0.0;           // helle Knochenoberfläche
-    if (len - bd >= 0.25) amp *= 0.04;           // Schallschatten
+  float e = echo(c, Pm);
+  // spiegelnde Grenzflächen (Kapseln, Zwerchfell, Gefäßwände, Blasenwand)
+  int cb = classAt(moved(P - dir*0.9, L - 0.9));
+  if (!similar(c, cb) && blocker(c) == 0 && blocker(cb) == 0) e = max(e, 0.85);
+  else if (c != cb && blocker(c) == 0 && blocker(cb) == 0) e = max(e, 0.5);
+
+  if (boneD > 0.0 || blocker(c) == 1){
+    float bd = boneD > 0.0 ? boneD : L;
+    e = (L - bd < 2.5) ? 1.25 : 0.0;           // helle Knochenoberfläche
+    if (L - bd >= 2.5) amp *= 0.04;            // Schallschatten
   }
-  if (gasD > 0.0 || q.b == 2){
-    float g = gasD > 0.0 ? gasD : len;
-    float d = len - g;
-    bool ptx = (uWin == 4 && (uCase & 16) != 0) || (uWin == 5 && (uCase & 32) != 0);
+  if (gasD > 0.0 || blocker(c) == 2){
+    float g = gasD > 0.0 ? gasD : L;
+    float d = L - g;
     bool lungWin = uWin >= 4;
-    float slideX = (lungWin && !ptx) ? breath()*0.35 : 0.0;
-    vec3 sp = vec3(P.x + slideX, P.y, P.z) * 14.0;
-    if (d < 0.14){
-      e = 1.1 * (0.7 + 0.5*vnoise(sp));          // Pleuralinie bzw. Gasgrenze
+    bool ptx = (uWin == 4 && (uCase & 16) != 0) || (uWin == 5 && (uCase & 32) != 0);
+    bool mirror = before == LIVER || before == SPLEEN;   // Zwerchfell: Spiegelartefakt statt A-Linien
+    float slideX = (lungWin && !ptx) ? breath()*3.5 : 0.0;
+    vec3 sp = (P + uRot[0]*slideX) * 1.4;
+    if (d < 1.4){
+      e = 1.1*(0.7 + 0.5*vnoise(sp));
+      speckle = 1.0;
+    } else if (mirror){
+      vec3 Q = moved(S + dir*(g - d), g - d);
+      e = 0.45*echo(classAt(Q), Q);
     } else {
-      float m = max(round(len/g), 2.0);
-      float u = (len - m*g)/0.09;
-      float al = exp(-u*u) * pow(lungWin ? (ptx ? 0.62 : 0.52) : 0.4, m - 1.0);
-      float shimmer = (lungWin && !ptx) ? 0.2*vnoise(sp*0.6 + vec3(0.0, 0.0, uTime*1.5))*exp(-d*3.0) : 0.0;
-      e = 0.9*al + shimmer + 0.03*vnoise(sp);    // A-Linien, Lungengleiten
+      float m = max(round(L/g), 2.0);
+      float u = (L - m*g)/0.9;
+      float al = exp(-u*u) * pow(lungWin ? (ptx ? 0.62 : 0.52) : 0.35, m - 1.0);
+      float shimmer = (lungWin && !ptx) ? 0.2*vnoise(sp*0.6 + vec3(0.0, 0.0, uTime*1.5))*exp(-d*0.3) : 0.0;
+      e = 0.9*al + shimmer + 0.03*vnoise(sp);
+      speckle = 1.0;
     }
-    speckle = 1.0;
   }
 
   float I = uGain * e * speckle * amp;
