@@ -3,7 +3,8 @@
 Ausgabe (data/<name>/):
   vol.bin.gz  RGBA8 je Voxel, x schnellste Achse, RAS-Orientierung
               R = Gewebeklasse, G = HU (-1000..1040 in 8-HU-Schritten),
-              B = Herz: Abstand zur nächsten Wand in 0,5 mm, A = Bitmaske Pathologien
+              B = Herz: Abstand zur nächsten Wand in 0,5 mm,
+              A = Bits 0-3 Pathologien, Bits 4-7 Unterklasse (Gefäß, Herzhöhle, Blase, siehe SUB)
   meta.json   Gitter, Voxelgröße und Schallfenster (Ursprung auf der Haut, Achsen)
 
 Aufruf:
@@ -45,6 +46,16 @@ GROUPS = {
     CARTILAGE: ['costal_cartilages'],
     SOFT: ['pancreas', 'adrenal_gland_right', 'adrenal_gland_left', 'thyroid_gland', 'prostate', 'spinal_cord'],
 }
+# Unterklassen für die Beschriftung, gleiche Nummern wie SUBLABELS in js/common.js
+SUB = {
+    'aorta': 1, 'inferior_vena_cava': 2, 'portal_vein_and_splenic_vein': 3, 'superior_vena_cava': 4,
+    'pulmonary_vein': 5, 'iliac_artery_left': 6, 'iliac_artery_right': 6, 'iliac_vena_left': 7, 'iliac_vena_right': 7,
+    'atrial_appendage_left': 10, 'urinary_bladder': 12, 'gallbladder': 13,
+    'brachiocephalic_trunk': 14, 'subclavian_artery_right': 14, 'subclavian_artery_left': 14,
+    'common_carotid_artery_right': 14, 'common_carotid_artery_left': 14,
+    'brachiocephalic_vein_left': 15, 'brachiocephalic_vein_right': 15,
+}
+LV, RV, LA, RA = 8, 9, 10, 11
 BONE_PREFIX = ('rib_', 'vertebrae_', 'sternum', 'scapula', 'clavicula', 'humerus', 'hip_', 'sacrum', 'femur')
 
 
@@ -92,30 +103,49 @@ def classify(hu, lab, names, spacing):
     cls[skin & (cls != BONE)] = SKIN
     lung = np.isin(lab, [by_name[n] for n in GROUPS[GAS] if n in by_name])
     sternum = lab == by_name['sternum']
-    return cls, {'body': body, 'lung': lung, 'sternum': sternum}
+    sub = np.zeros(hu.shape, np.uint8)
+    for n, v in SUB.items():
+        if n in by_name:
+            sub[(lab == by_name[n]) & np.isin(cls, [BLOOD, FLUID])] = v
+    return cls, {'body': body, 'lung': lung, 'sternum': sternum, 'sub': sub}
 
 
 def heart_aux(cls, spacing):
-    """Abstand zur nächsten Herzwand (Außenfläche oder Septum) in 0,5 mm.
+    """Abstand zur nächsten Herzwand (Außenfläche oder Septum) in 0,5 mm und Herzhöhlen (LV, RV, LA, RA).
 
     Die Kammern sind im nativen CT nicht sichtbar. Sie werden deshalb aus der echten Herzkontur
-    abgeleitet: Hauptachsen des Herzens bestimmen Septum und Klappenebene.
+    abgeleitet: Hauptachsen des Herzens bestimmen Septum und Klappenebene. Die Spitze zeigt nach
+    links, vorn und unten; links vom Septum liegen LV und LA, an der Basis die Vorhöfe.
     """
     heart = cls == HEART
     aux = np.zeros(cls.shape, np.uint8)
+    chambers = np.zeros(cls.shape, np.uint8)
     if heart.sum() < 100:
-        return aux
+        return aux, chambers
     idx = np.argwhere(heart).astype(np.float32) * spacing
     c = idx.mean(0)
     _, vecs = np.linalg.eigh(np.cov((idx - c).T))
     long_ax, short_ax = vecs[:, 2], vecs[:, 1]
+    # RAS: +x rechts, +y vorn, +z oben
+    if long_ax @ np.array([-1.0, 1.0, -1.0]) < 0:
+        long_ax = -long_ax                                     # zeigt jetzt zur Herzspitze
+    if short_ax @ np.array([-1.0, -1.0, 0.0]) < 0:
+        short_ax = -short_ax                                   # zeigt jetzt zur linken Herzhälfte
     grid = np.stack(np.meshgrid(*[np.arange(s, dtype=np.float32) * spacing for s in cls.shape], indexing='ij'), -1) - c.astype(np.float32)
-    d_septum = np.abs(grid @ short_ax)                         # Septum entlang der Längsachse
-    d_valve = np.abs(grid @ long_ax + 0.15 * np.ptp(idx @ long_ax))  # Klappenebene etwas zur Basis verschoben
+    along = grid @ long_ax
+    side = grid @ short_ax
+    valve = -0.15 * np.ptp(idx @ long_ax)                      # Klappenebene etwas zur Basis verschoben
+    d_septum = np.abs(side)
+    d_valve = np.abs(along - valve)
     d_out = ndi.distance_transform_edt(heart) * spacing
     d = np.minimum(np.minimum(d_out, d_septum + 1.0), d_valve + 2.0)
     aux[heart] = np.clip(d[heart] * 2, 0, 255).astype(np.uint8)
-    return aux
+    left, ventricle = side > 0, along > valve
+    chambers[heart & ventricle & left] = LV
+    chambers[heart & ventricle & ~left] = RV
+    chambers[heart & ~ventricle & left] = LA
+    chambers[heart & ~ventricle & ~left] = RA
+    return aux, chambers
 
 
 def pathology(cls, body, spacing):
@@ -286,8 +316,10 @@ def main():
     masks = {k: v[sl] for k, v in masks.items()}
     body = masks['body']
 
-    aux = heart_aux(cls, a.spacing)
+    aux, chambers = heart_aux(cls, a.spacing)
     path = pathology(cls, body, a.spacing)
+    sub = np.where(chambers > 0, chambers, masks['sub'])
+    path = path | (sub << 4).astype(np.uint8)
     windows = make_windows(cls, masks, a.spacing, a.windows.split(','))
 
     huq = np.clip((hu + 1000) / 8, 0, 255).astype(np.uint8)

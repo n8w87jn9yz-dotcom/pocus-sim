@@ -46,7 +46,9 @@ vec3 moved(vec3 p, float depthMm){
 }
 
 uvec4 voxel(vec3 p){
-  vec3 g = p/uSpacing + (vec3(hash(p*3.1), hash(p*5.7+1.0), hash(p*7.3+2.0)) - 0.5)*1.3; // Dithering glättet Kanten
+  // Dithering glättet Kanten. Auf ein 0,5-mm-Raster bezogen, damit Zittern der Hand das Bild nicht krisseln lässt.
+  vec3 q = floor(p*2.0)*0.5;
+  vec3 g = p/uSpacing + (vec3(hash(q*3.1), hash(q*5.7+1.0), hash(q*7.3+2.0)) - 0.5)*1.3;
   ivec3 i = ivec3(floor(g));
   if (any(lessThan(i, ivec3(0))) || any(greaterThanEqual(i, ivec3(uDims)))) return uvec4(0u);
   return texelFetch(uVol, i, 0);
@@ -54,7 +56,7 @@ uvec4 voxel(vec3 p){
 
 int classOf(uvec4 v){
   int c = int(v.r);
-  if ((int(v.a) & uCase) != 0 && c != BONE) c = FLUID;   // freie Flüssigkeit / Erguss
+  if ((int(v.a) & 15 & uCase) != 0 && c != BONE) c = FLUID;   // freie Flüssigkeit / Erguss
   if (c == HEART && float(v.b)*0.5 > 6.0 + 4.0*systole()) c = BLOOD; // Kammern schlagen mit
   return c;
 }
@@ -96,10 +98,18 @@ bool similar(int a, int b){
 
 int classAt(vec3 p){ return classOf(voxel(p)); }
 
+// Anpressdruck: Liegt die Haut unter einem Strahl um gOff tiefer (gekrümmte Körperoberfläche),
+// wird nur das oberflächliche Gewebe bis LS mm Tiefe hochgezogen. Tiefe Organe bleiben, wo sie sind,
+// sonst wird das Bild verzerrt, sobald die Sonde quer zu einer Rundung steht.
+float gOff = 0.0;
+const float LS = 45.0;
+float warp(float s){ return s < LS ? gOff + s*(LS - gOff)/LS : s; }
+vec3 at(vec3 S, vec3 dir, float s){ return S + dir*warp(s); }
+
 float refine(vec3 S, vec3 dir, float a, float b, int kind){
   for (int i = 0; i < 6; i++){
     float m = 0.5*(a+b);
-    if (blocker(classAt(moved(S+dir*m, m))) == kind) b = m; else a = m;
+    if (blocker(classAt(moved(at(S, dir, m), m))) == kind) b = m; else a = m;
   }
   return b;
 }
@@ -157,8 +167,8 @@ void main(){
     off += 1.0;
   }
   if (off >= 30.0){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
-  S += dir*off;
-  P += dir*off;
+  gOff = off;
+  P = at(S, dir, L);
 
 
   float att = 0.0, boneD = -1.0, gasD = -1.0, prev = 0.0;
@@ -168,7 +178,7 @@ void main(){
   for (int i = 0; i < 140; i++){
     float s = (float(i)+0.5)*stp;
     if (s >= L) break;
-    int c = classAt(moved(S + dir*s, s));
+    int c = classAt(moved(at(S, dir, s), s));
     int b = blocker(c);
     att += atten(c)*stp*0.1;
     if (b == 1 && boneD < 0.0) boneD = refine(S, dir, prev, s, 1);
@@ -189,7 +199,7 @@ void main(){
 
   float e = echo(c, Pm);
   // spiegelnde Grenzflächen (Kapseln, Zwerchfell, Gefäßwände, Blasenwand)
-  int cb = classAt(moved(P - dir*0.9, L - 0.9));
+  int cb = classAt(moved(at(S, dir, L - 0.9), L - 0.9));
   if (!similar(c, cb) && blocker(c) == 0 && blocker(cb) == 0) e = max(e, 0.85);
   else if (c != cb && blocker(c) == 0 && blocker(cb) == 0) e = max(e, 0.5);
 
@@ -210,7 +220,7 @@ void main(){
       e = 1.1*(0.7 + 0.5*vnoise(sp));
       speckle = 1.0;
     } else if (mirror){
-      vec3 Q = moved(S + dir*(g - d), g - d);
+      vec3 Q = moved(at(S, dir, g - d), g - d);
       e = 0.45*echo(classAt(Q), Q);
     } else {
       float m = max(round(L/g), 2.0);

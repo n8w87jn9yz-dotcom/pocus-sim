@@ -45,7 +45,7 @@ export const TISSUES = [
   { name: 'Milz', rgb: [0.60, 0.25, 0.60], tint: true },
   { name: 'Niere', rgb: [0.95, 0.55, 0.15], tint: true },
   { name: 'Nierenbecken', rgb: [1.0, 0.85, 0.40], tint: true },
-  { name: 'Blut / Gefäße', rgb: [0.90, 0.10, 0.12], tint: true },
+  { name: 'Gefäß', rgb: [0.90, 0.10, 0.12], tint: true },
   { name: 'Herzmuskel', rgb: [0.85, 0.35, 0.45], tint: true },
   { name: 'Knochen', rgb: [0.95, 0.93, 0.85] },
   { name: 'Darm', rgb: [0.45, 0.70, 0.30], tint: true },
@@ -54,6 +54,12 @@ export const TISSUES = [
   { name: 'Muskel', rgb: [0.70, 0.22, 0.22] },
   { name: 'Knorpel', rgb: [0.45, 0.90, 0.90] },
 ];
+
+// Unterklassen aus Kanal A (Bits 4-7), siehe SUB in tools/build_volume.py.
+// Herzhöhlen sind aus der Herzkontur abgeleitet, im nativen CT nicht sichtbar.
+export const SUBLABELS = ['', 'Aorta', 'V. cava inferior', 'Pfortader / V. lienalis', 'V. cava superior', 'Lungenvenen',
+  'A. iliaca', 'V. iliaca', 'Linker Ventrikel', 'Rechter Ventrikel', 'Linker Vorhof', 'Rechter Vorhof',
+  'Harnblase', 'Gallenblase', 'Supraaortale Arterien', 'V. brachiocephalica'];
 
 const D2R = Math.PI / 180;
 
