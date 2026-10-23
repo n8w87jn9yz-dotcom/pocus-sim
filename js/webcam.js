@@ -5,7 +5,7 @@
 
 export const PHONE_MARKER_MM = 54;   // Kantenlänge des schwarzen Quadrats, siehe print.html
 export const PHONE_MARKER_ID = 1;
-const LEVER = [0, -34, 4];           // Markermitte -> Mitte der Unterkante, im Gerätesystem (mm)
+const LEVER = [0, 34, 4];            // Markermitte -> Mitte der Oberkante (Schallfläche), im Gerätesystem (mm)
 const HFOV = 60;                     // horizontales Bildfeld einer üblichen Laptop-Webcam (Grad)
 const PROC_W = 960;                  // Breite des Analysebilds
 
@@ -119,7 +119,7 @@ export class WebcamTracker {
     const dW = add(mulV(this.Rec, sub(t, this.anchorT)), sub(mulV(R, LEVER), mulV(this.R0, LEVER)));
     // Verschiebung im Gerätesystem der Kalibrierlage, dann Gerät -> Sonde (lateral, Tiefe, Elevation)
     const dDev = mulV(T(this.R0), dW);
-    const d = [dDev[0], -dDev[1], dDev[2]];
+    const d = [dDev[0], dDev[1], -dDev[2]];
     this.last = this.last ? this.last.map((x, i) => x + (d[i] - x) * 0.4) : d;
     this.onUpdate({ ok: true, seen: true, anchored: true, d: this.last, dist: Math.round(-t[2] / 10) });
   }

@@ -2,16 +2,56 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b1016">
 <title>POCUS-Schallkopf</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="probe">
-<header class="probe-head">
-  <span>Schallkopf</span>
+<p class="face-hint">▲ Schallfläche: Oberkante des Handys auf den Patienten ▲</p>
+
+<!-- Das Handy ist der Schallkopf, kopfüber gehalten: Oberkante = Schallfläche, linke Kante = Marker.
+     Gezeichnet wird die Sonde mit dem Kopf nach unten und dann um 180° gedreht, die Texte bleiben lesbar.
+     Der Einschaltknopf kalibriert, Wischen auf dem Gehäuse verschiebt die Sonde. -->
+<svg id="probeView" class="probe-view" viewBox="0 0 200 400" preserveAspectRatio="xMidYMin meet" aria-label="Schallkopf">
+  <defs>
+    <linearGradient id="shell" x1="0" x2="1">
+      <stop offset="0" stop-color="#9aa5b0"/><stop offset="0.18" stop-color="#e9edf1"/>
+      <stop offset="0.55" stop-color="#d3d9df"/><stop offset="1" stop-color="#7d8893"/>
+    </linearGradient>
+    <linearGradient id="grip" x1="0" x2="1">
+      <stop offset="0" stop-color="#3a4550"/><stop offset="0.3" stop-color="#5d6a76"/><stop offset="1" stop-color="#2c353e"/>
+    </linearGradient>
+    <linearGradient id="lens" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#3b4b5c"/><stop offset="1" stop-color="#1c2631"/>
+    </linearGradient>
+    <radialGradient id="btn" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#5fc8ff"/><stop offset="1" stop-color="#1679b8"/>
+    </radialGradient>
+  </defs>
+  <g transform="rotate(180 100 200)">
+    <path d="M100 0 C100 20 104 30 100 52" stroke="#20262c" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <rect x="86" y="44" width="28" height="40" rx="9" fill="#2a3138"/>
+  <path id="probeBody" fill="url(#shell)" stroke="#6b7682" stroke-width="1.5"/>
+  <path id="probeGrip" fill="url(#grip)" opacity="0.9"/>
+  <path id="probeLens" fill="url(#lens)" stroke="#121820" stroke-width="1.5"/>
+  <g id="probeMarker">
+    <rect width="9" height="22" rx="3" fill="#2a3138"/>
+    <circle cx="4.5" cy="11" r="3" fill="#4fd18b"/>
+  </g>
+  </g>
+  <g id="calibBtn" class="power" role="button" aria-label="Kalibrieren" tabindex="0">
+    <circle cx="100" cy="204" r="28" fill="url(#btn)" stroke="#0d3b5a" stroke-width="2"/>
+    <path d="M100 187 v16 M90 194 a14 14 0 1 0 20 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+  <text id="markerLabel" class="probe-label dark" text-anchor="start">◀ Marker</text>
+  <text x="100" y="124" class="probe-label dark tiny" text-anchor="middle">Wischen = schieben</text>
+  <text x="100" y="166" class="probe-label strong dark" text-anchor="middle" id="calibText">Kalibrieren</text>
+</svg>
+<footer class="probe-head">
+  <span id="probeName">Schallkopf</span>
   <span class="status" id="status">Nicht verbunden</span>
-</header>
+</footer>
 
 <section id="pairBox" class="card">
   <p>Code vom Laptop eingeben:</p>
@@ -21,20 +61,9 @@
   </form>
 </section>
 
+<div class="buttons grid3 probe-types" id="probeTypes"></div>
 <p class="small center" id="tagNote" hidden></p>
 
-<!-- Unterkante des Bildschirms = Schallkopffläche, Punkt = Markerseite. Antippen wechselt den Schallkopf. -->
-<svg id="probeView" class="probe-view" viewBox="0 0 200 260" role="button" aria-label="Schallkopf wechseln">
-  <path id="probeShape" fill="#1a2532" stroke="#4fb3ff" stroke-width="3"/>
-  <circle id="probeMarker" r="7" fill="#4fb3ff"/>
-</svg>
-<p class="probe-name" id="probeName">–</p>
-
-<div id="swipePad" class="pad">Wischfeld: wischen verschiebt die Sonde<br>seitlich = entlang der Sonde, nach unten = zu dir</div>
-
-<button id="calibBtn" class="huge">Kalibrieren</button>
-
-<p class="small center">Handy hochkant halten: Unterkante = Schallkopffläche, Bildschirm zu dir, linke Kante = Markerseite. Fenster, Tiefe und Befunde stellst du am Rechner ein. Schallkopf wechseln: Bild antippen.</p>
 
 <script src="vendor/peerjs.min.js"></script>
 <script type="module" src="js/probe.js"></script>
