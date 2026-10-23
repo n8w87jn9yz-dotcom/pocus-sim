@@ -88,7 +88,7 @@ button.active { background: var(--accent); color: #04121f; border-color: var(--a
 }
 
 /* Handy */
-body.probe { padding: 0 12px; }
+body.probe { padding: 0 12px; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .probe-head { display: flex; justify-content: space-between; padding: 14px 4px; font-weight: 600; }
 .pair-form { display: flex; gap: 8px; }
 .pair-form input { flex: 1; min-width: 0; background: #0b1016; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 600 18px ui-monospace, monospace; }
@@ -99,7 +99,21 @@ body.probe { padding: 0 12px; }
 .grid4 { grid-template-columns: repeat(4, 1fr); }
 .probe button { padding: 12px 6px; }
 .cam-preview { width: 100%; max-height: 40vh; object-fit: contain; border-radius: 8px; background: #000; display: block; margin: 6px 0; }
-.probe-view { display: block; width: 100%; max-height: 46vh; margin: 8px 0 4px; cursor: pointer; }
+.probe-view { display: block; width: 100%; flex: 1; min-height: 0; touch-action: none; user-select: none; }
+.probe-label { fill: #8797a8; font-size: 10px; font-family: system-ui, sans-serif; }
+.probe-label.dark { fill: #2c3a48; }
+.probe-label.strong { fill: #1c2631; font-size: 13px; font-weight: 600; }
+.power { cursor: pointer; }
+.power.on circle { filter: drop-shadow(0 0 6px #4fd18b); }
+.face-hint { margin: 0; padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); text-align: center; font-size: 12px; color: var(--accent); border-top: 2px solid var(--accent); }
+.probe-types { margin: 0 0 4px; }
+.probe-types button { padding: 8px 4px; }
 .probe-name { text-align: center; font-weight: 600; margin: 0 0 12px; }
 .huge { width: 100%; padding: 28px 16px; font-size: 22px; font-weight: 600; margin-bottom: 12px; }
 .pad { height: 150px; border: 1px dashed var(--line); border-radius: 10px; display: grid; place-items: center; text-align: center; padding: 16px; color: var(--muted); font-size: 13px; touch-action: none; user-select: none; }
+
+.fan-src { position: absolute; left: 10px; top: 28px; margin: 0; }
+.fan-src[hidden] { display: none; }
+.fan-src button { padding: 4px 9px; font-size: 12.5px; }
+.experimental h3 { font-size: 13px; margin: 14px 0 4px; }
+.experimental summary { cursor: pointer; color: var(--muted); }

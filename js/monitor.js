@@ -11,7 +11,7 @@ const state = {
   frozen: false, cases: 0, hidden: false,
   slide: [0, 0],
   track: null, trackInfo: '', bodyScale: 100,
-  anat: 'off', tint: false, fan: true, note: '',
+  anat: 'body', tint: false, fan: true, fanSrc: 'anat', note: '',
 };
 let tracker = null;
 // Maus-Sonde: Funkmaus unter dem Handy, gemessen werden Mauspunkte pro mm Gleitweg
@@ -24,6 +24,7 @@ let time = 0;
 
 const $ = id => document.getElementById(id);
 const usCanvas = $('us'), overlay = $('overlay'), anatCanvas = $('anat');
+const cutCanvas = document.createElement('canvas');   // Anatomie-Schnitt als Textur für die 3D-Schallebene
 const anat3d = new Anatomy3D($('anat3d'));
 
 // ---------- WebGL ----------
@@ -172,15 +173,26 @@ function render() {
   const B = [0, 1, 2].map(r => [w.L[r], w.D[r], w.E[r]]);
   const M = matMul(B, lastM);
   const o = probeOrigin(vol, w);
-  const labels = (state.anat === 'cut' || state.tint) ? sampleLabels(vol, M, o) : null;
+  // In der 3D-Ansicht zeigt die Schallebene wahlweise die Anatomie (Standard) oder das Ultraschallbild
+  const cut3d = state.anat === 'body' && state.fan && state.fanSrc === 'anat';
+  const labels = (state.anat === 'cut' || cut3d || state.tint) ? sampleLabels(vol, M, o) : null;
+  if (state.anat === 'cut' || cut3d) drawPass(vol, M, o, 1);
   if (state.anat === 'cut') {
-    drawPass(vol, M, o, 1);
     const ctx = anatCanvas.getContext('2d');
     ctx.drawImage(usCanvas, 0, 0, anatCanvas.width, anatCanvas.height);
     drawLabels(ctx, labels.all, anatCanvas.width, anatCanvas.height);
   }
+  if (cut3d) {
+    if (cutCanvas.width !== usCanvas.width || cutCanvas.height !== usCanvas.height) {
+      cutCanvas.width = usCanvas.width;
+      cutCanvas.height = usCanvas.height;
+    }
+    const ctx = cutCanvas.getContext('2d');
+    ctx.drawImage(usCanvas, 0, 0);
+    drawLabels(ctx, labels.fan, cutCanvas.width, cutCanvas.height, 0.7);
+  }
   drawPass(vol, M, o, DEBUG ? 1 : 0);
-  if (state.anat === 'body') draw3D(vol, M, o);
+  if (state.anat === 'body') draw3D(vol, M, o, cut3d ? cutCanvas : usCanvas);
   drawOverlay(lastM);
   if (state.tint) drawLabels(overlay.getContext('2d'), labels.fan, overlay.width, overlay.height);
 }
@@ -244,8 +256,8 @@ function sampleLabels(vol, M, o) {
   return { all, fan };
 }
 
-function drawLabels(ctx, map, W, H) {
-  const top = topOffset(), sc = H / (state.depth + top), dpr = window.devicePixelRatio || 1;
+function drawLabels(ctx, map, W, H, scale = 1) {
+  const top = topOffset(), sc = H / (state.depth + top), dpr = (window.devicePixelRatio || 1) * scale;
   ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   const placed = [];
@@ -272,7 +284,7 @@ function drawLabels(ctx, map, W, H) {
 const SPOTS = [[58, 128], [142, 120], [100, 112], [100, 218], [74, 72], [126, 72]];
 
 // 3D-Körpermodell aus demselben CT, Sonde und mitbewegte Schallebene
-function draw3D(vol, M, o) {
+function draw3D(vol, M, o, src) {
   const name = WINDOWS[state.win].vol;
   if (anat3d.current !== anat3d.models[name]) {
     if (!anat3d.loading) {
@@ -281,7 +293,7 @@ function draw3D(vol, M, o) {
     return;
   }
   anat3d.showFan = state.fan;
-  anat3d.update({ o, M, kind: state.probe, depthCm: state.depth, topCm: topOffset(), us: usCanvas, usAspect: usCanvas.width / usCanvas.height });
+  anat3d.update({ o, M, kind: state.probe, depthCm: state.depth, topCm: topOffset(), us: src, usAspect: usCanvas.width / usCanvas.height });
   const c = $('anat3d');
   anat3d.render(c.clientWidth * (window.devicePixelRatio || 1), c.clientHeight * (window.devicePixelRatio || 1));
 }
@@ -377,6 +389,7 @@ function setAnat(mode) {
   $('anat').hidden = mode !== 'cut';
   $('anat3d').hidden = mode !== 'body';
   $('anat3dTools').hidden = mode !== 'body';
+  $('fanSrc').hidden = mode !== 'body';
   $('anatTitle').textContent = mode === 'cut' ? 'Anatomie im Schnitt' : '3D-Anatomie';
   resize();
   syncUI();
@@ -466,7 +479,13 @@ function buildUI() {
   $('randomBtn').addEventListener('click', () => { randomCase(); syncUI(); });
   for (const b of document.querySelectorAll('#anatButtons button')) b.addEventListener('click', () => setAnat(b.dataset.mode));
   $('tint').addEventListener('change', e => { state.tint = e.target.checked; });
-  $('fanToggle').addEventListener('change', e => { state.fan = e.target.checked; });
+  for (const b of document.querySelectorAll('#fanSrc button')) {
+    b.addEventListener('click', () => {
+      state.fan = b.dataset.src !== 'off';
+      if (state.fan) state.fanSrc = b.dataset.src;
+      for (const x of document.querySelectorAll('#fanSrc button')) x.classList.toggle('active', x === b);
+    });
+  }
   $('viewReset').addEventListener('click', () => anat3d.resetView());
   for (const l of LAYERS) {
     const lab = document.createElement('label');
@@ -708,7 +727,7 @@ buildUI();
 bindMouse();
 bindMouseProbe();
 resize();
-syncUI();
+setAnat(state.anat);
 startPeer();
 requestAnimationFrame(loop);
 window.__sim = { state, pose, mouseProbe, setWindow, setProbe, calibrate, setAnat, applyTag, slideProbe, onData };
