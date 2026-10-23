@@ -1,0 +1,2 @@
+vendor/peerjs.min.js: PeerJS 1.5.4, MIT-Lizenz, https://github.com/peers/peerjs
+vendor/qrcode.js: qrcode-generator 1.4.4, MIT-Lizenz, https://github.com/kazuhikoarase/qrcode-generator

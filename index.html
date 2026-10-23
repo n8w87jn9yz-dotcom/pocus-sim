@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POCUS-Simulator</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="monitor">
+<main class="layout">
+  <section class="screen">
+    <div class="us-wrap" id="usWrap">
+      <canvas id="us"></canvas>
+      <canvas id="overlay"></canvas>
+    </div>
+    <div class="readout" id="readout"></div>
+  </section>
+
+  <aside class="panel">
+    <h1>POCUS-Simulator</h1>
+
+    <section class="card">
+      <h2>Schallkopf koppeln</h2>
+      <div class="pair">
+        <div id="qr" class="qr"></div>
+        <div>
+          <p class="status" id="connStatus">Verbinde mit Server …</p>
+          <p class="small">QR-Code mit dem Handy scannen oder Code eingeben:</p>
+          <p class="code" id="pairCode">–</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Schallfenster</h2>
+      <svg id="body" viewBox="0 0 200 260" class="body" aria-label="Körperskizze">
+        <path d="M70 10 h60 q6 0 8 6 l6 28 q34 6 40 30 l-6 70 q-4 12 -14 12 l-6 90 q-2 8 -10 8 h-96 q-8 0 -10 -8 l-6 -90 q-10 0 -14 -12 l-6 -70 q6 -24 40 -30 l6 -28 q2 -6 8 -6z" class="torso"/>
+        <line x1="100" y1="44" x2="100" y2="104" class="sternum"/>
+        <g id="spots"></g>
+      </svg>
+      <div class="buttons" id="winButtons"></div>
+      <p class="small" id="winHint"></p>
+    </section>
+
+    <section class="card">
+      <h2>Schallkopf</h2>
+      <div class="buttons" id="probeButtons"></div>
+      <label class="slider">Tiefe <input type="range" id="depth" step="1"><span id="depthVal"></span></label>
+      <label class="slider">Gain <input type="range" id="gain" min="0.3" max="3" step="0.05"><span id="gainVal"></span></label>
+      <div class="buttons">
+        <button id="freezeBtn">Freeze</button>
+        <button id="calibBtn">Neutralstellung</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Fall</h2>
+      <div class="buttons" id="scenarioButtons"></div>
+      <div id="findings" class="findings"></div>
+      <div class="buttons">
+        <button id="randomBtn">Zufallsfall</button>
+        <button id="revealBtn" hidden>Auflösen</button>
+      </div>
+    </section>
+
+    <details class="card help">
+      <summary>Bedienung</summary>
+      <p>Handy hochkant halten, die <b>Unterkante</b> ist die Schallkopffläche, der Bildschirm zeigt zu dir. Markerseite ist links im Bild.</p>
+      <p>Ohne Handy: Ziehen im Bild = Kippen und Fächern, mit Umschalttaste = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, Tasten 1–6 = Fenster, L/K/S = Schallkopf, F = Freeze, N = Neutralstellung.</p>
+    </details>
+  </aside>
+</main>
+<script src="vendor/peerjs.min.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script type="module" src="js/monitor.js"></script>
+</body>
+</html>

@@ -1,0 +1,327 @@
+import { VERT, FRAG } from './shader.js';
+import {
+  PROBES, WINDOWS, FINDINGS, SCENARIOS,
+  matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
+} from './common.js';
+
+const state = {
+  probe: 'convex', win: 0, depth: PROBES.convex.def, gain: 1.0,
+  frozen: false, cases: 0, hidden: false,
+  slide: [0, 0],
+};
+const pose = { target: null, q: null, Rn: null, mouse: { rock: 0, fan: 0, rot: 0 }, source: 'mouse' };
+let conn = null;
+let time = 0;
+
+const $ = id => document.getElementById(id);
+const usCanvas = $('us'), overlay = $('overlay');
+
+// ---------- WebGL ----------
+const gl = usCanvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+if (!gl) document.body.innerHTML = '<p class="fatal">Dieser Browser unterstützt kein WebGL2.</p>';
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+const U = {};
+for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot']) U[n] = gl.getUniformLocation(prog, n);
+
+// Interne Auflösung bewusst niedrig, das Bild wird per CSS skaliert (?h=300 für schwache Rechner)
+const RENDER_H = +new URLSearchParams(location.search).get('h') || 460;
+function resize() {
+  const wrap = $('usWrap');
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const scale = RENDER_H / h;
+  usCanvas.width = Math.round(w * scale);
+  usCanvas.height = RENDER_H;
+  const dpr = window.devicePixelRatio || 1;
+  overlay.width = Math.round(w * dpr);
+  overlay.height = Math.round(h * dpr);
+}
+window.addEventListener('resize', resize);
+
+function topOffset() { return state.probe === 'convex' ? 0.9 : 0.15; }
+
+function currentMatrix() {
+  if (pose.source === 'phone' && pose.q) {
+    if (!pose.Rn) pose.Rn = matFromQuat(pose.q);
+    return probeMatrix(pose.Rn, matFromQuat(pose.q));
+  }
+  const m = pose.mouse;
+  return matMul(matMul(rotY(m.rot), rotX(m.fan)), rotZ(m.rock));
+}
+
+let lastM = currentMatrix();
+function render() {
+  const M = lastM;
+  gl.viewport(0, 0, usCanvas.width, usCanvas.height);
+  gl.uniform2f(U.uRes, usCanvas.width, usCanvas.height);
+  gl.uniform1f(U.uDepth, state.depth);
+  gl.uniform1f(U.uGain, state.gain);
+  gl.uniform1f(U.uTime, time);
+  gl.uniform1f(U.uTop, topOffset());
+  gl.uniform1i(U.uProbe, PROBES[state.probe].id);
+  gl.uniform1i(U.uWin, state.win);
+  gl.uniform1i(U.uCase, state.cases);
+  gl.uniform3f(U.uOrigin, state.slide[0], 0, state.slide[1]);
+  // spaltenweise: lateral, Tiefe, Elevation
+  gl.uniformMatrix3fv(U.uRot, false, [M[0][0], M[1][0], M[2][0], M[0][1], M[1][1], M[2][1], M[0][2], M[1][2], M[2][2]]);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  drawOverlay(M);
+}
+
+function drawOverlay(M) {
+  const ctx = overlay.getContext('2d');
+  const W = overlay.width, H = overlay.height, dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, W, H);
+  const sc = H / (state.depth + topOffset());
+  const y0 = topOffset() * sc;
+  ctx.font = `${12 * dpr}px system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(220,230,240,0.85)';
+  ctx.strokeStyle = 'rgba(220,230,240,0.6)';
+  ctx.lineWidth = dpr;
+  // Tiefenskala rechts vom Bild
+  const D = state.depth;
+  const half = { linear: [2, 2], convex: [2.33, (4 + D) * 0.58], phased: [0.3, D * 0.7] }[state.probe];
+  const xs = Math.min(W - 34 * dpr, W / 2 + half[1] * sc + 10 * dpr);
+  for (let cm = 0; cm <= state.depth; cm++) {
+    const y = y0 + cm * sc;
+    const big = cm % 5 === 0;
+    ctx.beginPath(); ctx.moveTo(xs, y); ctx.lineTo(xs + (big ? 10 : 5) * dpr, y); ctx.stroke();
+    if (big && cm > 0) ctx.fillText(`${cm}`, xs + 13 * dpr, y + 4 * dpr);
+  }
+  // Orientierungsmarker links oben
+  ctx.fillStyle = '#4fb3ff';
+  ctx.beginPath(); ctx.arc(W / 2 - half[0] * sc - 14 * dpr, y0 + 6 * dpr, 5 * dpr, 0, 7); ctx.fill();
+  if (state.frozen) {
+    ctx.fillStyle = '#4fb3ff';
+    ctx.font = `bold ${14 * dpr}px system-ui, sans-serif`;
+    ctx.fillText('FREEZE', W - 80 * dpr, 24 * dpr);
+  }
+  const p = PROBES[state.probe];
+  const L = [M[0][0], M[1][0], M[2][0]], Dn = [M[0][1], M[1][1], M[2][1]];
+  const deg = r => Math.round(r * 180 / Math.PI);
+  $('readout').innerHTML =
+    `<span>${state.hidden ? 'Fall verdeckt' : WINDOWS[state.win].name}</span>` +
+    `<span>${p.name} ${p.mhz} MHz</span><span>Tiefe ${state.depth} cm</span><span>Gain ${state.gain.toFixed(2)}</span>` +
+    `<span>Drehen ${deg(Math.atan2(L[2], L[0]))}° · Fächern ${deg(Math.asin(Math.max(-1, Math.min(1, Dn[2]))))}° · Kippen ${deg(Math.asin(Math.max(-1, Math.min(1, Dn[0]))))}°</span>` +
+    `<span class="${pose.source === 'phone' ? 'ok' : ''}">${pose.source === 'phone' ? 'Handy' : 'Maus'}</span>`;
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (!state.frozen) {
+    time += dt;
+    if (pose.target) pose.q = pose.q ? qNlerp(pose.q, pose.target, 0.35) : pose.target;
+    lastM = currentMatrix();
+  }
+  requestAnimationFrame(loop);
+  if (!window.__sim?.paused) render();
+}
+
+// ---------- Zustand und UI ----------
+function setProbe(key) {
+  state.probe = key;
+  state.depth = PROBES[key].def;
+  syncUI();
+}
+function setWindow(i) {
+  state.win = i;
+  state.slide = [0, 0];
+  syncUI();
+}
+function changeDepth(d) {
+  const p = PROBES[state.probe];
+  state.depth = Math.max(p.min, Math.min(p.max, state.depth + d));
+  syncUI();
+}
+function calibrate() {
+  const q = pose.target || pose.q;
+  pose.Rn = q ? matFromQuat(q) : null;
+  pose.mouse = { rock: 0, fan: 0, rot: 0 };
+  state.slide = [0, 0];
+  lastM = currentMatrix();
+}
+
+function syncUI() {
+  for (const b of document.querySelectorAll('#probeButtons button')) b.classList.toggle('active', b.dataset.key === state.probe);
+  for (const b of document.querySelectorAll('#winButtons button')) b.classList.toggle('active', +b.dataset.i === state.win);
+  for (const c of document.querySelectorAll('#spots circle')) c.classList.toggle('active', +c.dataset.i === state.win);
+  const p = PROBES[state.probe];
+  Object.assign($('depth'), { min: p.min, max: p.max, value: state.depth });
+  $('depthVal').textContent = `${state.depth} cm`;
+  $('gain').value = state.gain;
+  $('gainVal').textContent = state.gain.toFixed(2);
+  $('freezeBtn').classList.toggle('active', state.frozen);
+  const hint = WINDOWS[state.win].hint;
+  $('winHint').textContent = hint === state.probe ? '' : `Üblich für dieses Fenster: ${PROBES[hint].name}`;
+  $('findings').hidden = state.hidden;
+  $('revealBtn').hidden = !state.hidden;
+  for (const c of document.querySelectorAll('#findings input')) c.checked = (state.cases & +c.dataset.bit) !== 0;
+  sendState();
+}
+
+function sendState() {
+  if (conn && conn.open) {
+    conn.send({ t: 'state', probe: state.probe, win: state.win, depth: state.depth, gain: state.gain, frozen: state.frozen });
+  }
+}
+
+function button(label, onClick, data = {}) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  Object.assign(b.dataset, data);
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function buildUI() {
+  for (const [key, p] of Object.entries(PROBES)) $('probeButtons').append(button(p.name, () => setProbe(key), { key }));
+  WINDOWS.forEach((w, i) => $('winButtons').append(button(`${i + 1} ${w.name}`, () => setWindow(i), { i })));
+  const spots = [[58, 128], [142, 120], [100, 112], [100, 218], [74, 72], [126, 72]];
+  spots.forEach(([x, y], i) => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    Object.assign(c.dataset, { i });
+    c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 9);
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    t.textContent = WINDOWS[i].name;
+    c.append(t);
+    c.addEventListener('click', () => setWindow(i));
+    $('spots').append(c);
+  });
+  SCENARIOS.forEach(s => $('scenarioButtons').append(button(s.name, () => { state.cases = s.cases; state.hidden = false; syncUI(); })));
+  for (const f of FINDINGS) {
+    const l = document.createElement('label');
+    const c = document.createElement('input');
+    c.type = 'checkbox';
+    c.dataset.bit = f.bit;
+    c.addEventListener('change', () => { state.cases ^= f.bit; syncUI(); });
+    l.append(c, ' ' + f.name);
+    $('findings').append(l);
+  }
+  $('randomBtn').addEventListener('click', () => {
+    let c = 0;
+    for (const f of FINDINGS) if (Math.random() < 0.3) c |= f.bit;
+    if ((c & 48) === 48) c &= ~32;
+    state.cases = c;
+    state.hidden = true;
+    syncUI();
+  });
+  $('revealBtn').addEventListener('click', () => { state.hidden = false; syncUI(); });
+  $('depth').addEventListener('input', e => { state.depth = +e.target.value; syncUI(); });
+  $('gain').addEventListener('input', e => { state.gain = +e.target.value; syncUI(); });
+  $('freezeBtn').addEventListener('click', () => { state.frozen = !state.frozen; syncUI(); });
+  $('calibBtn').addEventListener('click', calibrate);
+}
+
+// ---------- Maus und Tastatur als Ersatz für das Handy ----------
+function bindMouse() {
+  let drag = null;
+  overlay.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; overlay.setPointerCapture(e.pointerId); });
+  overlay.addEventListener('pointerup', () => { drag = null; });
+  overlay.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = (e.clientX - drag.x) * 0.006, dy = (e.clientY - drag.y) * 0.006;
+    drag = { x: e.clientX, y: e.clientY };
+    pose.source = 'mouse';
+    if (e.shiftKey) pose.mouse.rot += dx;
+    else { pose.mouse.rock += dx; pose.mouse.fan += dy; }
+  });
+  overlay.addEventListener('wheel', e => { e.preventDefault(); changeDepth(e.deltaY > 0 ? 1 : -1); }, { passive: false });
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
+    const k = e.key.toLowerCase();
+    if (k >= '1' && k <= '6') setWindow(+k - 1);
+    else if (k === 'l') setProbe('linear');
+    else if (k === 'k' || k === 'c') setProbe('convex');
+    else if (k === 's') setProbe('phased');
+    else if (k === 'f') { state.frozen = !state.frozen; syncUI(); }
+    else if (k === 'n') calibrate();
+    else if (e.key.startsWith('Arrow')) {
+      const d = { ArrowLeft: [-0.3, 0], ArrowRight: [0.3, 0], ArrowUp: [0, 0.3], ArrowDown: [0, -0.3] }[e.key];
+      slide(d[0], d[1]);
+      e.preventDefault();
+    }
+  });
+}
+
+function slide(dx, dz) {
+  state.slide = [Math.max(-5, Math.min(5, state.slide[0] + dx)), Math.max(-5, Math.min(5, state.slide[1] + dz))];
+}
+
+// ---------- Kopplung mit dem Handy (WebRTC über PeerJS) ----------
+function onData(m) {
+  switch (m.t) {
+    case 'pose': pose.target = m.q; pose.source = 'phone'; break;
+    case 'probe': if (m.v in PROBES) setProbe(m.v); break;
+    case 'window': if (WINDOWS[m.v]) setWindow(m.v); break;
+    case 'depth': changeDepth(m.d); break;
+    case 'gain': state.gain = Math.max(0.3, Math.min(3, state.gain + m.d)); syncUI(); break;
+    case 'freeze': state.frozen = !state.frozen; syncUI(); break;
+    case 'calib': calibrate(); break;
+    case 'slide': slide(m.dx, m.dz); break;
+    case 'hello': sendState(); break;
+  }
+}
+
+function startPeer() {
+  if (!window.Peer) { $('connStatus').textContent = 'Kopplung nicht verfügbar, nur Maussteuerung'; return; }
+  const code = Math.random().toString(36).slice(2, 8);
+  const peer = new Peer(`pocus-sim-${code}`);
+  peer.on('open', () => {
+    const url = new URL('probe.html', location.href);
+    url.hash = code;
+    $('pairCode').textContent = code;
+    $('connStatus').textContent = 'Warte auf Handy …';
+    const qr = qrcode(0, 'M');
+    qr.addData(url.href);
+    qr.make();
+    $('qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    $('qr').title = url.href;
+  });
+  peer.on('connection', c => {
+    if (conn) conn.close();
+    conn = c;
+    c.on('open', () => { $('connStatus').textContent = 'Handy verbunden'; $('connStatus').classList.add('ok'); sendState(); });
+    c.on('data', onData);
+    c.on('close', () => {
+      if (conn !== c) return;
+      conn = null;
+      pose.source = 'mouse';
+      pose.target = pose.q = pose.Rn = null;
+      $('connStatus').textContent = 'Handy getrennt, warte …';
+      $('connStatus').classList.remove('ok');
+    });
+  });
+  peer.on('error', err => {
+    if (err.type === 'unavailable-id') { peer.destroy(); startPeer(); return; }
+    $('connStatus').textContent = `Verbindungsfehler: ${err.type}`;
+  });
+  peer.on('disconnected', () => setTimeout(() => { if (!peer.destroyed) peer.reconnect(); }, 3000));
+}
+
+buildUI();
+bindMouse();
+resize();
+syncUI();
+startPeer();
+requestAnimationFrame(loop);
+window.__sim = { state, pose, setWindow, setProbe, calibrate };

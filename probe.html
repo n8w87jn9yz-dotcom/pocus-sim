@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b1016">
+<title>POCUS-Schallkopf</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="probe">
+<header class="probe-head">
+  <span>Schallkopf</span>
+  <span class="status" id="status">Nicht verbunden</span>
+</header>
+
+<section id="pairBox" class="card">
+  <p>Code vom Laptop eingeben:</p>
+  <form id="pairForm" class="pair-form">
+    <input id="codeInput" autocomplete="off" autocapitalize="none" maxlength="6" placeholder="z. B. a1b2c3">
+    <button>Verbinden</button>
+  </form>
+</section>
+
+<button id="sensorBtn" class="big">Sensoren starten</button>
+
+<section class="card">
+  <h2>Schallkopf</h2>
+  <div class="buttons grid3" id="probeButtons"></div>
+</section>
+
+<section class="card">
+  <h2>Fenster</h2>
+  <div class="buttons grid2" id="winButtons"></div>
+</section>
+
+<section class="card">
+  <div class="buttons grid4">
+    <button data-cmd="depth" data-d="-1">Tiefe −</button>
+    <button data-cmd="depth" data-d="1">Tiefe +</button>
+    <button data-cmd="gain" data-d="-0.1">Gain −</button>
+    <button data-cmd="gain" data-d="0.1">Gain +</button>
+  </div>
+  <div class="buttons grid2">
+    <button data-cmd="freeze" id="freezeBtn">Freeze</button>
+    <button data-cmd="calib">Neutralstellung</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Verschieben</h2>
+  <div id="pad" class="pad">Hier wischen, um die Sonde ein paar Zentimeter zu verschieben</div>
+</section>
+
+<p class="small center">Handy hochkant halten: Unterkante = Schallkopffläche, Bildschirm zu dir. In Neutralstellung halten und „Neutralstellung“ tippen.</p>
+
+<script src="vendor/peerjs.min.js"></script>
+<script type="module" src="js/probe.js"></script>
+</body>
+</html>
