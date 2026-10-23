@@ -4,6 +4,7 @@ import {
   matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
 } from './common.js';
 import { WebcamTracker } from './webcam.js';
+import { buildFields } from './fields.js';
 import { Anatomy3D, LAYERS } from './anatomy3d.js';
 
 const state = {
@@ -51,7 +52,7 @@ const aPos = gl.getAttribLocation(prog, 'aPos');
 gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 const U = {};
-for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug', 'uTint']) U[n] = gl.getUniformLocation(prog, n);
+for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug', 'uTint', 'uSm', 'uBlk']) U[n] = gl.getUniformLocation(prog, n);
 
 // Interne Auflösung bewusst niedrig, das Bild wird per CSS skaliert (?h=300 für schwache Rechner)
 const DEBUG = new URLSearchParams(location.search).has('debug');
@@ -97,7 +98,18 @@ async function fetchVolume(name) {
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8UI, dx, dy, dz, 0, gl.RGBA_INTEGER, gl.UNSIGNED_BYTE, buf);
   for (const p of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_3D, p, gl.NEAREST);
-  return { meta, data: buf, tex };
+  // geglättete Felder, trilinear gefiltert (siehe fields.js)
+  const { A, B } = buildFields(buf, meta.dims);
+  const smooth = (fmt, ifmt, arr) => {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D, t);
+    gl.texImage3D(gl.TEXTURE_3D, 0, ifmt, dx, dy, dz, 0, fmt, gl.UNSIGNED_BYTE, arr);
+    for (const p of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_3D, p, gl.LINEAR);
+    for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R]) gl.texParameteri(gl.TEXTURE_3D, p, gl.CLAMP_TO_EDGE);
+    return t;
+  };
+  const sm = smooth(gl.RGBA, gl.RGBA8, A), blk = smooth(gl.RGBA, gl.RGBA8, B);
+  return { meta, data: buf, tex, sm, blk };
 }
 
 function currentVolume() {
@@ -195,6 +207,12 @@ function drawPass(vol, M, o, debug) {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_3D, vol.tex);
   gl.uniform1i(U.uVol, 0);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_3D, vol.sm);
+  gl.uniform1i(U.uSm, 1);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_3D, vol.blk);
+  gl.uniform1i(U.uBlk, 2);
   gl.uniform3f(U.uDims, ...vol.meta.dims);
   gl.uniform1f(U.uSpacing, vol.meta.spacing);
   gl.uniform1i(U.uDebug, debug);
