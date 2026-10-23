@@ -3,6 +3,8 @@
 Trainingssimulator für Notfallsonografie (POCUS). Der Laptop zeigt das Ultraschallbild, das Handy ist der Schallkopf.
 Das Bild wird aus echten CT-Daten berechnet: Organe aus der CT-Segmentierung bekommen Echogenität und Dämpfung,
 der Schallstrahl erzeugt Schallschatten hinter Knochen, A-Linien hinter der Pleura und ein Spiegelbild über dem Zwerchfell.
+Grauwerte, Speckle-Körnung, Tiefenausgleich und Schatten sind an echten Konvex- und Linearaufnahmen abgeglichen
+(Log-Kompression über 55 dB, Rayleigh-Speckle im Gewebe verankert, Grenzflächen aus Impedanzsprüngen, weiche Schattenränder).
 
 Reine statische Web-App ohne Build-Schritt.
 
@@ -10,9 +12,10 @@ Reine statische Web-App ohne Build-Schritt.
 - `index.html`: Monitor am Laptop: Bild, Anatomieansicht, QR-Kopplung, Fensterwahl, Schallkopf, Befunde, Webcam, NFC-Adressen
 - `probe.html`: Schallkopf am Handy: nur Sonde (Antippen wechselt den Typ) und „Kalibrieren“, liest NFC-Tags
 - `js/shader.js`: Bilderzeugung aus dem CT-Volumen (WebGL2), Anatomieansicht, Einfärbung der Organe
+- `js/fields.js`: glättet das CT beim Laden zu Feldern für Rückstreuung, Impedanz, Knochen, Gas und Flüssigkeit (runde Organgrenzen statt Voxeltreppen)
 - `js/webcam.js`: altes Webcam-Tracking des Markers hinten am Handy (js-aruco2)
 - `print.html`: Druckvorlage für den Handy-Marker
-- `js/common.js`: Schallköpfe, Fenster, Befunde, Rotationsmathematik
+- `js/common.js`: Schallköpfe, Fenster, Befunde, Gewebeklassen mit Rückstreuung und Impedanz, Rotationsmathematik
 - `tools/build_volume.py`: wandelt CT + Segmentierung in `data/<name>/` um
 - `tools/build_meshes.py`: baut daraus die 3D-Modelle `data/<name>/anatomy.glb` (`python tools/build_meshes.py --name thorax`, danach mit `npx @gltf-transform/cli meshopt` komprimieren)
 - `data/`: fertige Volumen, siehe [data/QUELLEN.md](data/QUELLEN.md)
