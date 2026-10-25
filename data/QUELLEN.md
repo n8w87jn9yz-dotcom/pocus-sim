@@ -16,3 +16,8 @@ TotalSegmentator-Datensatz (CC BY 4.0, https://doi.org/10.5281/zenodo.6802613).
 ## 3D-Modelle (anatomy.glb)
 Oberflächen aus den Gewebeklassen von `vol.bin.gz`, berechnet mit `tools/build_meshes.py` (Marching Cubes, geglättet).
 Gleiche Herkunft und Lizenz wie das jeweilige Volumen.
+
+## Echte Vergleichsbilder (Taste R)
+Nicht im Paket enthalten: Die Clips werden direkt von Wikimedia Commons geladen. Urheber, Lizenz (CC BY 2.0,
+CC BY-SA 3.0) und Link stehen in `js/reference.js` und werden unter jedem Clip angezeigt. Im Simulator nur
+grau gefiltert und am Rand beschnitten (Geräte- und Textfelder), sonst unverändert.

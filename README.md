@@ -4,7 +4,9 @@ Trainingssimulator für Notfallsonografie (POCUS). Der Laptop zeigt das Ultrasch
 Das Bild wird aus echten CT-Daten berechnet: Organe aus der CT-Segmentierung bekommen Echogenität und Dämpfung,
 der Schallstrahl erzeugt Schallschatten hinter Knochen, A-Linien hinter der Pleura und ein Spiegelbild über dem Zwerchfell.
 Grauwerte, Speckle-Körnung, Tiefenausgleich und Schatten sind an echten Konvex- und Linearaufnahmen abgeglichen
-(Log-Kompression über 55 dB, Rayleigh-Speckle im Gewebe verankert, Grenzflächen aus Impedanzsprüngen, weiche Schattenränder).
+(Log-Kompression über 55 dB, Rayleigh-Speckle im Gewebe verankert und quer zum Strahl leicht verschmiert,
+Körnung und Schichtung je Gewebe, Grenzflächen aus Impedanzsprüngen, dünne Schichten als helle Linien, weiche Schattenränder).
+Das Herz schlägt als inverse Verformung im Shader: Gewebe und Speckle wandern mit dem Muskel, Erguss und Perikard bleiben stehen.
 
 Reine statische Web-App ohne Build-Schritt.
 
@@ -12,7 +14,8 @@ Reine statische Web-App ohne Build-Schritt.
 - `index.html`: Monitor am Laptop: Bild, Anatomieansicht, QR-Kopplung, Fensterwahl, Schallkopf, Befunde, Webcam, NFC-Adressen
 - `probe.html`: Schallkopf am Handy: nur Sonde (Antippen wechselt den Typ) und „Kalibrieren“, liest NFC-Tags
 - `js/shader.js`: Bilderzeugung aus dem CT-Volumen (WebGL2), Anatomieansicht, Einfärbung der Organe
-- `js/fields.js`: glättet das CT beim Laden zu Feldern für Rückstreuung, Impedanz, Knochen, Gas und Flüssigkeit (runde Organgrenzen statt Voxeltreppen)
+- `js/fields.js`: glättet das CT beim Laden zu Feldern für Rückstreuung, Impedanz, Knochen, Gas und Flüssigkeit (runde Organgrenzen statt Voxeltreppen);
+  dazu ein Herzfeld aus echten Abstandsfeldern (runde Kammern, gewölbtes Septum, Perikardsaum)
 - `js/webcam.js`: altes Webcam-Tracking des Markers hinten am Handy (js-aruco2)
 - `print.html`: Druckvorlage für den Handy-Marker
 - `js/common.js`: Schallköpfe, Fenster, Befunde, Gewebeklassen mit Rückstreuung und Impedanz, Rotationsmathematik

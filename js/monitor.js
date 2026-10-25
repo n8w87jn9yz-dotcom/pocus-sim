@@ -4,8 +4,9 @@ import {
   matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
 } from './common.js';
 import { WebcamTracker } from './webcam.js';
-import { buildFields } from './fields.js';
+import { buildFields, buildHeart } from './fields.js';
 import { Anatomy3D, LAYERS } from './anatomy3d.js';
+import { ReferenceClip } from './reference.js';
 
 const state = {
   probe: 'convex', win: 0, depth: PROBES.convex.def, gain: 1.0,
@@ -27,6 +28,7 @@ const $ = id => document.getElementById(id);
 const usCanvas = $('us'), overlay = $('overlay');
 const cutCanvas = document.createElement('canvas');   // Anatomie-Schnitt als Textur für die 3D-Schallebene
 const anat3d = new Anatomy3D($('anat3d'));
+const refClip = new ReferenceClip();
 
 // ---------- WebGL ----------
 const gl = usCanvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
@@ -52,7 +54,7 @@ const aPos = gl.getAttribLocation(prog, 'aPos');
 gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 const U = {};
-for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug', 'uTint', 'uSm', 'uBlk']) U[n] = gl.getUniformLocation(prog, n);
+for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug', 'uTint', 'uSm', 'uBlk', 'uHrt', 'uHC', 'uHAx']) U[n] = gl.getUniformLocation(prog, n);
 
 // Interne Auflösung bewusst niedrig, das Bild wird per CSS skaliert (?h=300 für schwache Rechner)
 const DEBUG = new URLSearchParams(location.search).has('debug');
@@ -109,7 +111,16 @@ async function fetchVolume(name) {
     return t;
   };
   const sm = smooth(gl.RGBA, gl.RGBA8, A), blk = smooth(gl.RGBA, gl.RGBA8, B);
-  return { meta, data: buf, tex, sm, blk };
+  // Herzfeld nur, wenn das Volumen ein Herz enthält; sonst ein leeres 1x1x1-Feld (Herz weit weg)
+  const h = buildHeart(buf, meta.dims, meta.spacing);
+  let hrt;
+  if (h) hrt = smooth(gl.RG, gl.RG8, h.tex);
+  else {
+    hrt = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D, hrt);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RG8, 1, 1, 1, 0, gl.RG, gl.UNSIGNED_BYTE, new Uint8Array([0, 0]));
+  }
+  return { meta, data: buf, tex, sm, blk, hrt, heart: h ? { c: h.center, ax: h.axis } : { c: [0, 0, 0], ax: [0, 0, 1] } };
 }
 
 function currentVolume() {
@@ -213,6 +224,11 @@ function drawPass(vol, M, o, debug) {
   gl.activeTexture(gl.TEXTURE2);
   gl.bindTexture(gl.TEXTURE_3D, vol.blk);
   gl.uniform1i(U.uBlk, 2);
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_3D, vol.hrt);
+  gl.uniform1i(U.uHrt, 3);
+  gl.uniform3f(U.uHC, ...vol.heart.c);
+  gl.uniform3f(U.uHAx, ...vol.heart.ax);
   gl.uniform3f(U.uDims, ...vol.meta.dims);
   gl.uniform1f(U.uSpacing, vol.meta.spacing);
   gl.uniform1i(U.uDebug, debug);
@@ -467,6 +483,7 @@ function syncUI() {
   $('findings').hidden = state.hidden;
   $('revealBtn').hidden = !state.hidden;
   for (const c of document.querySelectorAll('#findings input')) c.checked = (state.cases & +c.dataset.bit) !== 0;
+  refClip.update(state.win, state.cases, state.hidden);
   sendState();
 }
 
@@ -514,6 +531,7 @@ function buildUI() {
   $('holdOff').addEventListener('click', () => setHoldOff(true));
   $('holdToggle').checked = !holdOff;
   $('holdToggle').addEventListener('change', e => { setHoldOff(!e.target.checked); if (e.target.checked) showHoldTip(); });
+  $('refToggle').addEventListener('change', e => { refClip.toggle(e.target.checked); syncUI(); });
   for (const b of document.querySelectorAll('#fanSrc button')) {
     b.addEventListener('click', () => {
       state.fan = b.dataset.src !== 'off';
@@ -570,6 +588,7 @@ function bindMouse() {
     else if (k === 'n') calibrate();
     else if (k === 'a') setAnat(state.anat === 'body' ? 'off' : 'body');
     else if (k === 't') { state.tint = !state.tint; syncUI(); }
+    else if (k === 'r') { refClip.toggle(); syncUI(); }
     else if (k === 'm') toggleMouseProbe();
     else if (k === 'e' && mouseProbe.on) toggleMeasure();
     else if (e.key.startsWith('Arrow')) {

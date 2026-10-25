@@ -15,6 +15,12 @@
         <canvas id="us"></canvas>
         <canvas id="overlay"></canvas>
         <p class="loading" id="loading" hidden>Lade CT …</p>
+        <figure class="ref-box" id="refBox" hidden>
+          <figcaption><b id="refTitle"></b><button id="refClose" title="Schließen">×</button></figcaption>
+          <video id="refVideo" muted loop playsinline autoplay hidden></video>
+          <img id="refImg" alt="Echte Ultraschallaufnahme" hidden>
+          <p class="small" id="refCredit"></p>
+        </figure>
         <div class="hold-tip" id="holdTip" hidden>
           <h3 id="holdTitle"></h3>
           <img id="holdImg" alt="">
@@ -64,6 +70,7 @@
       </div>
       <label class="check"><input type="checkbox" id="tint"> Organe einfärben und beschriften</label>
       <label class="check"><input type="checkbox" id="holdToggle"> Halte-Hinweis bei jedem Fenster</label>
+      <label class="check" title="Frei lizenzierte echte Aufnahme des gleichen Fensters neben dem Simulator"><input type="checkbox" id="refToggle"> Echtes Vergleichsbild (Taste R)</label>
     </section>
 
     <section class="card">
@@ -139,7 +146,7 @@
       <p><b>Verschieben mit der Maus-Sonde:</b> Funkmaus mit Gummiband oder Klett hinten an die Oberkante des Handys, Maus vorn zeigt von dir weg (sonst bei „Maus“ die Drehung einstellen). „Maus-Sonde starten“ (oder Taste M), dann Sonde ansetzen und am Handy „Kalibrieren“. Die Maus misst das Gleiten, das Handy die Drehung. Den Laptop-Trackpad dabei nicht berühren, Esc beendet. Einmal einmessen: Taste E, Sonde genau 10 cm am Lineal schieben, nochmal E. „Größe“ gleicht Puppe oder Partner an den CT-Körper an.</p>
       <p><b>Ohne Maus:</b> Im Wischfeld am Handy wischen wie auf einem Touchpad: seitlich = entlang der Sonde, nach unten = zu dir hin.</p>
       <p>Standardlagen: RUQ/LUQ koronal in der Axillarlinie, Marker kranial. Subxiphoidal flach unter dem Xiphoid, Richtung linke Schulter, Marker rechts. Becken transversal suprapubisch, Marker rechts. Lunge sagittal 2. ICR medioklavikulär, Marker kranial.</p>
-      <p>Ohne Handy: Ziehen im Bild = Kippen und Fächern, mit Umschalttaste = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, Tasten 1–6 = Fenster, L/K/S = Schallkopf, F = Freeze, N = Neutralstellung, A = Anatomieansicht, T = Organe einfärben, M = Maus-Sonde.</p>
+      <p>Ohne Handy: Ziehen im Bild = Kippen und Fächern, mit Umschalttaste = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, Tasten 1–6 = Fenster, L/K/S = Schallkopf, F = Freeze, N = Neutralstellung, A = Anatomieansicht, T = Organe einfärben, R = echtes Vergleichsbild, M = Maus-Sonde.</p>
     </details>
   </aside>
 </main>
