@@ -4,7 +4,7 @@ import {
   matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
 } from './common.js';
 import { WebcamTracker } from './webcam.js';
-import { buildFields } from './fields.js';
+import { buildFields, buildHeart } from './fields.js';
 import { Anatomy3D, LAYERS } from './anatomy3d.js';
 
 const state = {
@@ -52,7 +52,7 @@ const aPos = gl.getAttribLocation(prog, 'aPos');
 gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 const U = {};
-for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug', 'uTint', 'uSm', 'uBlk']) U[n] = gl.getUniformLocation(prog, n);
+for (const n of ['uRes', 'uDepth', 'uGain', 'uTime', 'uTop', 'uProbe', 'uWin', 'uCase', 'uOrigin', 'uRot', 'uVol', 'uDims', 'uSpacing', 'uDebug', 'uTint', 'uSm', 'uBlk', 'uHrt', 'uHC', 'uHAx']) U[n] = gl.getUniformLocation(prog, n);
 
 // Interne Auflösung bewusst niedrig, das Bild wird per CSS skaliert (?h=300 für schwache Rechner)
 const DEBUG = new URLSearchParams(location.search).has('debug');
@@ -109,7 +109,16 @@ async function fetchVolume(name) {
     return t;
   };
   const sm = smooth(gl.RGBA, gl.RGBA8, A), blk = smooth(gl.RGBA, gl.RGBA8, B);
-  return { meta, data: buf, tex, sm, blk };
+  // Herzfeld nur, wenn das Volumen ein Herz enthält; sonst ein leeres 1x1x1-Feld (Herz weit weg)
+  const h = buildHeart(buf, meta.dims, meta.spacing);
+  let hrt;
+  if (h) hrt = smooth(gl.RG, gl.RG8, h.tex);
+  else {
+    hrt = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D, hrt);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RG8, 1, 1, 1, 0, gl.RG, gl.UNSIGNED_BYTE, new Uint8Array([0, 0]));
+  }
+  return { meta, data: buf, tex, sm, blk, hrt, heart: h ? { c: h.center, ax: h.axis } : { c: [0, 0, 0], ax: [0, 0, 1] } };
 }
 
 function currentVolume() {
@@ -213,6 +222,11 @@ function drawPass(vol, M, o, debug) {
   gl.activeTexture(gl.TEXTURE2);
   gl.bindTexture(gl.TEXTURE_3D, vol.blk);
   gl.uniform1i(U.uBlk, 2);
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_3D, vol.hrt);
+  gl.uniform1i(U.uHrt, 3);
+  gl.uniform3f(U.uHC, ...vol.heart.c);
+  gl.uniform3f(U.uHAx, ...vol.heart.ax);
   gl.uniform3f(U.uDims, ...vol.meta.dims);
   gl.uniform1f(U.uSpacing, vol.meta.spacing);
   gl.uniform1i(U.uDebug, debug);

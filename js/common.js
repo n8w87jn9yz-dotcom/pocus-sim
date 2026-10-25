@@ -49,22 +49,24 @@ export const SCENARIOS = [
 // z: akustische Impedanz in MRayl (Literaturwerte), Sprünge ergeben die hellen Grenzflächen.
 //   Knochen und Gas zeichnet der Shader selbst, deshalb hier neutral.
 // hu: typischer CT-Wert der Klasse; Abweichungen davon werden zu feiner Binnenstruktur.
+// Speckle-Charakter je Gewebe: cell = Körnchengröße relativ zur Sonde, spk = Speckle-Kontrast (1 = voll entwickelt),
+//   lay = Schichtung parallel zur Sondenfläche (Muskelfasern, strähniges Myokard, Darmwand). Fehlt ein Wert, gilt 1, 1, 0.
 export const TISSUES = [
   { name: 'Luft', rgb: [0, 0, 0], scat: 0, z: 1.63, hu: -1000 },
   { name: 'Lunge / Darmgas', rgb: [0.55, 0.75, 0.95], scat: 0, z: 1.63, hu: -850 },
-  { name: 'Fett', rgb: [0.95, 0.85, 0.45], scat: 1, z: 1.38, hu: -95 },
-  { name: 'Weichteil', rgb: [0.62, 0.58, 0.56], scat: 0.8, z: 1.63, hu: 10 },
-  { name: 'Leber', rgb: [0.70, 0.30, 0.18], tint: true, scat: 1.0, z: 1.66, hu: 44 },
-  { name: 'Milz', rgb: [0.60, 0.25, 0.60], tint: true, scat: 1.1, z: 1.65, hu: 36 },
-  { name: 'Niere', rgb: [0.95, 0.55, 0.15], tint: true, scat: 0.62, z: 1.62, hu: 20 },
-  { name: 'Nierenbecken', rgb: [1.0, 0.85, 0.40], tint: true, scat: 2.0, z: 1.45, hu: 0 },
+  { name: 'Fett', rgb: [0.95, 0.85, 0.45], scat: 1, z: 1.38, hu: -95, cell: 1.1, spk: 0.9 },
+  { name: 'Weichteil', rgb: [0.62, 0.58, 0.56], scat: 0.8, z: 1.63, hu: 10, lay: 0.2 },
+  { name: 'Leber', rgb: [0.70, 0.30, 0.18], tint: true, scat: 1.0, z: 1.66, hu: 44, cell: 1.0, spk: 1.0, lay: 0.05 },
+  { name: 'Milz', rgb: [0.60, 0.25, 0.60], tint: true, scat: 1.1, z: 1.65, hu: 36, cell: 0.85, spk: 0.85 },
+  { name: 'Niere', rgb: [0.95, 0.55, 0.15], tint: true, scat: 0.62, z: 1.62, hu: 20, cell: 0.9, spk: 0.85, lay: 0.15 },
+  { name: 'Nierenbecken', rgb: [1.0, 0.85, 0.40], tint: true, scat: 2.0, z: 1.45, hu: 0, cell: 1.2, lay: 0.3 },
   { name: 'Gefäß', rgb: [0.90, 0.10, 0.12], tint: true, scat: 0.035, z: 1.61, hu: 32 },
-  { name: 'Herzmuskel', rgb: [0.85, 0.35, 0.45], tint: true, scat: 0.7, z: 1.67, hu: 32 },
+  { name: 'Herzmuskel', rgb: [0.85, 0.35, 0.45], tint: true, scat: 0.7, z: 1.67, hu: 32, cell: 0.9, spk: 0.9, lay: 0.35 },
   { name: 'Knochen', rgb: [0.95, 0.93, 0.85], scat: 0.3, z: 1.63, hu: 200 },
-  { name: 'Darm', rgb: [0.45, 0.70, 0.30], tint: true, scat: 1.25, z: 1.63, hu: 10 },
+  { name: 'Darm', rgb: [0.45, 0.70, 0.30], tint: true, scat: 1.25, z: 1.63, hu: 10, cell: 1.2, lay: 0.3 },
   { name: 'Flüssigkeit', rgb: [0.15, 0.55, 1.0], tint: true, scat: 0.02, z: 1.52, hu: 10 },
-  { name: 'Haut', rgb: [1.0, 0.75, 0.65], scat: 1.6, z: 1.75, hu: -150 },
-  { name: 'Muskel', rgb: [0.70, 0.22, 0.22], scat: 0.55, z: 1.70, hu: 20 },
+  { name: 'Haut', rgb: [1.0, 0.75, 0.65], scat: 1.6, z: 1.75, hu: -150, cell: 0.7, lay: 0.3 },
+  { name: 'Muskel', rgb: [0.70, 0.22, 0.22], scat: 0.55, z: 1.70, hu: 20, cell: 0.9, lay: 0.5 },
   { name: 'Knorpel', rgb: [0.45, 0.90, 0.90], scat: 0.08, z: 1.85, hu: 90 },
 ];
 
