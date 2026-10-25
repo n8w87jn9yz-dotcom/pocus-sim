@@ -6,6 +6,7 @@ import {
 import { WebcamTracker } from './webcam.js';
 import { buildFields, buildHeart } from './fields.js';
 import { Anatomy3D, LAYERS } from './anatomy3d.js';
+import { ReferenceClip } from './reference.js';
 
 const state = {
   probe: 'convex', win: 0, depth: PROBES.convex.def, gain: 1.0,
@@ -27,6 +28,7 @@ const $ = id => document.getElementById(id);
 const usCanvas = $('us'), overlay = $('overlay');
 const cutCanvas = document.createElement('canvas');   // Anatomie-Schnitt als Textur für die 3D-Schallebene
 const anat3d = new Anatomy3D($('anat3d'));
+const refClip = new ReferenceClip();
 
 // ---------- WebGL ----------
 const gl = usCanvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
@@ -481,6 +483,7 @@ function syncUI() {
   $('findings').hidden = state.hidden;
   $('revealBtn').hidden = !state.hidden;
   for (const c of document.querySelectorAll('#findings input')) c.checked = (state.cases & +c.dataset.bit) !== 0;
+  refClip.update(state.win, state.cases, state.hidden);
   sendState();
 }
 
@@ -528,6 +531,7 @@ function buildUI() {
   $('holdOff').addEventListener('click', () => setHoldOff(true));
   $('holdToggle').checked = !holdOff;
   $('holdToggle').addEventListener('change', e => { setHoldOff(!e.target.checked); if (e.target.checked) showHoldTip(); });
+  $('refToggle').addEventListener('change', e => { refClip.toggle(e.target.checked); syncUI(); });
   for (const b of document.querySelectorAll('#fanSrc button')) {
     b.addEventListener('click', () => {
       state.fan = b.dataset.src !== 'off';
@@ -584,6 +588,7 @@ function bindMouse() {
     else if (k === 'n') calibrate();
     else if (k === 'a') setAnat(state.anat === 'body' ? 'off' : 'body');
     else if (k === 't') { state.tint = !state.tint; syncUI(); }
+    else if (k === 'r') { refClip.toggle(); syncUI(); }
     else if (k === 'm') toggleMouseProbe();
     else if (k === 'e' && mouseProbe.on) toggleMeasure();
     else if (e.key.startsWith('Arrow')) {
