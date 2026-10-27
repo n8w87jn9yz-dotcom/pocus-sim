@@ -19,6 +19,8 @@ import trimesh
 from scipy import ndimage as ndi
 from skimage import measure
 
+import gefaesse_schema
+
 AIR, GAS, FAT, SOFT, LIVER, SPLEEN, KIDNEY, SINUS, BLOOD, HEART, BONE, BOWEL, FLUID, SKIN, MUSCLE, CARTILAGE = range(16)
 
 
@@ -27,7 +29,7 @@ def load(name, root):
     nx, ny, nz = meta['dims']
     raw = gzip.open(root / name / 'vol.bin.gz').read()
     vol = np.frombuffer(raw, np.uint8).reshape(nz, ny, nx, 4).transpose(2, 1, 0, 3)
-    return vol[..., 0], vol[..., 1].astype(np.float32) * 8 - 1000, meta
+    return vol[..., 0], vol[..., 1].astype(np.float32) * 8 - 1000, vol[..., 3] >> 4, meta
 
 
 def largest(mask, keep=1, min_vox=0):
@@ -56,7 +58,11 @@ def surface(mask, spacing, sigma=1.0, faces=8000, smooth=10, up=2):
     m = trimesh.Trimesh(v, t, process=True)
     if len(m.faces) > faces:
         m = m.simplify_quadric_decimation(face_count=faces)
+    before = m.vertices.copy()
     trimesh.smoothing.filter_taubin(m, iterations=smooth)
+    # An nicht mannigfaltigen Stellen schießt die Glättung einzelne Ecken weit hinaus (Zacken bis 20 cm): zurücksetzen
+    spike = np.linalg.norm(m.vertices - before, axis=1) > 2 * spacing
+    m.vertices[spike] = before[spike]
     m.fix_normals()
     return m
 
@@ -71,24 +77,15 @@ def open_caps(m, shape, spacing):
     return m
 
 
-def split_vessels(blood, spacing):
-    """Gefäße in arteriell und venös trennen (Aorta links, V. cava rechts der Mittellinie)."""
-    pts = np.argwhere(blood)
-    if len(pts) == 0:
-        return blood, blood
-    # Abstand zum dicksten Gefäßstrang: Mittelpunkt je Schicht liegt zwischen Aorta und IVC
-    art = np.zeros_like(blood)
-    for z in range(blood.shape[2]):
-        sl = blood[:, :, z]
-        if not sl.any():
-            continue
-        lbl, n = ndi.label(sl)
-        for i in range(1, n + 1):
-            c = np.argwhere(lbl == i).mean(0)
-            # RAS: kleines x = links → Aorta; tiefer liegend (kleines y = posterior) ebenfalls eher Aorta
-            if c[0] < blood.shape[0] * 0.5 + 6 / spacing:
-                art[:, :, z] |= lbl == i
-    return art, blood & ~art
+# Unterklassen aus build_volume.py (SUB): Aorta, A. iliaca, supraaortale Arterien bzw. V. cava inf./sup., Pfortader/V. lienalis,
+# V. iliaca, V. brachiocephalica. Lungenvenen (5) eigenes Modell (sauerstoffreich, rot wie im Atlas).
+# Linkes Herzohr (10) gehört zum Herzen, nicht zu den Gefäßen.
+ARTERIES, VEINS, PULM_VEINS = (1, 6, 14), (2, 3, 4, 7, 15), (5,)
+
+
+def split_vessels(blood, sub):
+    """Gefäße nach der Segmentierung in arteriell und venös trennen (nicht nach der Lage zur Mittellinie)."""
+    return blood & np.isin(sub, ARTERIES), blood & np.isin(sub, VEINS)
 
 
 def split_bones(cls, body, spacing):
@@ -124,7 +121,7 @@ def split_bones(cls, body, spacing):
 
 
 def build(name, root):
-    cls, hu, meta = load(name, root)
+    cls, hu, sub, meta = load(name, root)
     sp = meta['spacing']
     body = ndi.binary_fill_holes(cls != AIR)
     body = largest(body)
@@ -151,10 +148,11 @@ def build(name, root):
     budget = {'spine': 20000, 'sternum': 6000, 'pelvis': 24000, 'ribs': 40000}
     for key, m in split_bones(cls, body, sp).items():
         parts[key] = (m, 0.7, budget[key], 8, 2)
-    blood = largest(cls == BLOOD, 6, 30)
-    art, ven = split_vessels(blood, sp)
+    art, ven = split_vessels(cls == BLOOD, sub)
+    art, ven = largest(art, 8, 30), largest(ven, 8, 30)
     parts['artery'] = (art, 0.8, 12000, 10, 2)
     parts['vein'] = (ven, 0.8, 12000, 10, 2)
+    parts['pulmvene'] = (largest((cls == BLOOD) & np.isin(sub, PULM_VEINS), 6, 30), 0.8, 6000, 10, 2)
 
     scene = trimesh.Scene()
     stats = {}
@@ -166,6 +164,12 @@ def build(name, root):
             m = open_caps(m, cls.shape, sp)
         scene.add_geometry(m, node_name=key, geom_name=key)
         stats[key] = len(m.faces)
+    # schematisch ergänzte Äste (nur 3D-Ansicht), siehe gefaesse_schema.py
+    for key, meshes in gefaesse_schema.ergaenzen(cls, sub, sp).items():
+        if meshes:
+            m = trimesh.util.concatenate(meshes)
+            scene.add_geometry(m, node_name=key, geom_name=key)
+            stats[key] = len(m.faces)
     out = root / name / 'anatomy.glb'
     scene.export(out)
     print(out, f'{out.stat().st_size / 1e6:.2f} MB', stats)

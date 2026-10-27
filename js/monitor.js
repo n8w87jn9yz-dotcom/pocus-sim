@@ -1,7 +1,7 @@
 import { VERT, FRAG } from './shader.js';
 import {
   PROBES, WINDOWS, FINDINGS, SCENARIOS, TISSUES, SUBLABELS,
-  matFromQuat, qNlerp, probeMatrix, matMul, rotX, rotY, rotZ,
+  matFromQuat, qNlerp, probeMatrix, winCfg, setJustage, matMul, rotX, rotY, rotZ,
 } from './common.js';
 import { WebcamTracker } from './webcam.js';
 import { buildFields, buildHeart } from './fields.js';
@@ -13,7 +13,7 @@ const state = {
   frozen: false, cases: 0, hidden: false,
   slide: [0, 0],
   track: null, trackInfo: '', bodyScale: 100,
-  anat: 'body', tint: false, fan: true, fanSrc: 'anat', note: '',
+  anat: 'body', tint: false, fan: true, fanSrc: 'beam', note: '',
 };
 let tracker = null;
 // Maus-Sonde: Funkmaus unter dem Handy, gemessen werden Mauspunkte pro mm Gleitweg
@@ -26,7 +26,6 @@ let time = 0;
 
 const $ = id => document.getElementById(id);
 const usCanvas = $('us'), overlay = $('overlay');
-const cutCanvas = document.createElement('canvas');   // Anatomie-Schnitt als Textur für die 3D-Schallebene
 const anat3d = new Anatomy3D($('anat3d'));
 const refClip = new ReferenceClip();
 
@@ -76,7 +75,7 @@ function topOffset() { return state.probe === 'convex' ? 0.9 : 0.15; }
 function currentMatrix() {
   if (pose.source === 'phone' && pose.q) {
     if (!pose.Rn) pose.Rn = matFromQuat(pose.q);
-    return probeMatrix(pose.Rn, matFromQuat(pose.q));
+    return probeMatrix(pose.Rn, matFromQuat(pose.q), winCfg(state.win).dreh);
   }
   const m = pose.mouse;
   return matMul(matMul(rotY(m.rot), rotX(m.fan)), rotZ(m.rock));
@@ -195,21 +194,9 @@ function render() {
   const B = [0, 1, 2].map(r => [w.L[r], w.D[r], w.E[r]]);
   const M = matMul(B, lastM);
   const o = probeOrigin(vol, w);
-  // In der 3D-Ansicht zeigt die Schallebene wahlweise die Anatomie (Standard) oder das Ultraschallbild
-  const cut3d = state.anat === 'body' && state.fan && state.fanSrc === 'anat';
-  const labels = (cut3d || state.tint) ? sampleLabels(vol, M, o) : null;
-  if (cut3d) {
-    drawPass(vol, M, o, 1);
-    if (cutCanvas.width !== usCanvas.width || cutCanvas.height !== usCanvas.height) {
-      cutCanvas.width = usCanvas.width;
-      cutCanvas.height = usCanvas.height;
-    }
-    const ctx = cutCanvas.getContext('2d');
-    ctx.drawImage(usCanvas, 0, 0);
-    drawLabels(ctx, labels.fan, cutCanvas.width, cutCanvas.height, 0.7);
-  }
+  const labels = state.tint ? sampleLabels(vol, M, o) : null;
   drawPass(vol, M, o, DEBUG ? 1 : 0);
-  if (state.anat === 'body') draw3D(vol, M, o, cut3d ? cutCanvas : usCanvas);
+  if (state.anat === 'body') draw3D(vol, M, o, usCanvas);
   drawOverlay(lastM);
   if (state.tint) drawLabels(overlay.getContext('2d'), labels.fan, overlay.width, overlay.height);
 }
@@ -321,7 +308,7 @@ function draw3D(vol, M, o, src) {
     return;
   }
   anat3d.showFan = state.fan;
-  anat3d.update({ o, M, kind: state.probe, depthCm: state.depth, topCm: topOffset(), us: src, usAspect: usCanvas.width / usCanvas.height });
+  anat3d.update({ o, M, kind: state.probe, depthCm: state.depth, topCm: topOffset(), us: src, usAspect: usCanvas.width / usCanvas.height, src: state.fanSrc });
   const c = $('anat3d');
   anat3d.render(c.clientWidth * (window.devicePixelRatio || 1), c.clientHeight * (window.devicePixelRatio || 1));
 }
@@ -484,12 +471,16 @@ function syncUI() {
   $('revealBtn').hidden = !state.hidden;
   for (const c of document.querySelectorAll('#findings input')) c.checked = (state.cases & +c.dataset.bit) !== 0;
   refClip.update(state.win, state.cases, state.hidden);
+  const j = winCfg(state.win);
+  $('justWin').textContent = WINDOWS[state.win].name;
+  for (const b of document.querySelectorAll('#justMarker button')) b.classList.toggle('active', b.dataset.v === j.marker);
+  for (const b of document.querySelectorAll('#justUm button')) b.classList.toggle('active', !!j.um[b.dataset.k]);
   sendState();
 }
 
 function sendState() {
   if (conn && conn.open) {
-    conn.send({ t: 'state', probe: state.probe, win: state.win, depth: state.depth, gain: state.gain, frozen: state.frozen });
+    conn.send({ t: 'state', probe: state.probe, win: state.win, marker: winCfg(state.win).marker, depth: state.depth, gain: state.gain, frozen: state.frozen });
   }
 }
 
@@ -655,6 +646,7 @@ function startPeer() {
 // Gleitweg im Sondensystem (lateral, Elevation in mm) auf die Kalibrierlage drehen und aufsummieren.
 // Nur die Drehung der Sonde auf der Haut zählt, Kippen und Fächern ändern die Gleitrichtung nicht.
 function slideProbe(lat, elev) {
+  const ws = winCfg(state.win).wisch; lat *= ws; elev *= ws;   // siehe wisch in common.js
   let lx = lastM[0][0], le = lastM[2][0];
   const n = Math.hypot(lx, le);
   if (n < 0.3) return;   // Sonde steht fast senkrecht zur Lateralrichtung, Gleitrichtung unklar
@@ -715,6 +707,12 @@ function updateMouseStatus() {
     ? `Einmessen: Sonde genau 10 cm am Lineal schieben, dann E oder Klick (${Math.round(mouseProbe.measure.d / mouseProbe.perMm)} mm)`
     : mouseProbe.on ? `Verschiebung ${cm(t[0])} / ${cm(t[2])} cm · ${mouseProbe.perMm.toFixed(1).replace('.', ',')} Punkte/mm`
     : 'Aus. Wischen am Handy verschiebt die Sonde auch ohne Maus.';
+}
+
+// Justage je Schallfenster: Markerseite am Handy und Lage um 180° gedreht
+function bindJustage() {
+  for (const b of document.querySelectorAll('#justMarker button')) b.addEventListener('click', () => { setJustage(state.win, { marker: b.dataset.v }); syncUI(); });
+  for (const b of document.querySelectorAll('#justUm button')) b.addEventListener('click', () => { setJustage(state.win, { um: { [b.dataset.k]: !winCfg(state.win).um[b.dataset.k] } }); syncUI(); });
 }
 
 function bindMouseProbe() {
@@ -780,6 +778,7 @@ function buildTagList() {
 buildUI();
 bindMouse();
 bindMouseProbe();
+bindJustage();
 resize();
 setAnat(state.anat);
 showHoldTip();

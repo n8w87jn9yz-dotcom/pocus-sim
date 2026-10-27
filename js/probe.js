@@ -7,6 +7,7 @@ let peer = null;
 let gotEvent = false;
 let sensorsOn = false;
 let probe = 'convex';
+let flip = false;   // Marker an der rechten Handykante, kommt je Fenster vom Rechner (WINDOWS/winCfg in common.js)
 
 // NFC-Tag-Adresse (probe.html?s=… oder ?w=…), wird nach dem Verbinden an den Rechner geschickt
 const params = new URLSearchParams(location.search);
@@ -60,7 +61,7 @@ function connect(code) {
       send({ t: 'hello' });
       sendTag(pendingTag);
     });
-    conn.on('data', m => { if (m.t === 'state' && m.probe in PROBES) showProbe(m.probe); });
+    conn.on('data', m => { if (m.t === 'state' && m.probe in PROBES) { flip = m.marker === 'rechts'; showProbe(m.probe); } });
     conn.on('close', () => { setStatus('Getrennt'); $('pairBox').hidden = false; });
   });
   peer.on('error', err => setStatus(err.type === 'peer-unavailable' ? 'Code nicht gefunden' : `Fehler: ${err.type}`));
@@ -81,10 +82,12 @@ function showProbe(key) {
     `M78 84 H122 Q130 84 132 94 L136 184 Q140 250 ${r} 300 L${r} 354 L${l} 354 L${l} 300 Q60 250 64 184 L68 94 Q70 84 78 84 Z`);
   $('probeGrip').setAttribute('d', 'M74 100 H126 L129 148 Q100 156 71 148 Z');
   $('probeLens').setAttribute('d', lens);
-  $('probeMarker').setAttribute('transform', `translate(${r + 1} 318)`);   // nach der Drehung links
-  // Marker liegt nach der Drehung an der linken Kante bei y ≈ 60…82
-  $('markerLabel').setAttribute('x', l + 4);
+  // Marker liegt nach der Drehung an der linken Kante bei y ≈ 60…82, bei Marker rechts an der rechten
+  $('probeMarker').setAttribute('transform', `translate(${flip ? l - 10 : r + 1} 318)`);
+  $('markerLabel').setAttribute('x', flip ? r - 4 : l + 4);
   $('markerLabel').setAttribute('y', 75);
+  $('markerLabel').setAttribute('text-anchor', flip ? 'end' : 'start');
+  $('markerLabel').textContent = flip ? 'Marker ▶' : '◀ Marker';
   $('probeName').textContent = `${PROBES[key].name} · ${PROBES[key].mhz} MHz`;
   for (const b of document.querySelectorAll('#probeTypes button')) b.classList.toggle('active', b.dataset.key === key);
 }
@@ -147,6 +150,7 @@ document.addEventListener('visibilitychange', () => {
 
 // Erster Tipp startet die Sensoren (iPhone fragt dabei nach), jeder Tipp übernimmt die aktuelle Haltung als Standardlage
 async function calibrate() {
+  lockPortrait();
   if (!sensorsOn && !(await startSensors())) return;
   send({ t: 'calib' });
   $('calibBtn').classList.add('on');
@@ -164,13 +168,39 @@ for (const [key, p] of Object.entries(PROBES)) {
   $('probeTypes').append(b);
 }
 
+// Bildschirmdrehung: Android sperrt im Vollbild das Hochformat (braucht einen Tipp). iPhones erlauben das Webseiten nicht,
+// dort dreht die Seite ihre Anzeige gegen, damit der Schallkopf immer gleich auf dem Handy steht.
+async function lockPortrait() {
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    await screen.orientation?.lock?.('portrait');
+  } catch { /* nicht unterstützt, dann bleibt die Gegendrehung */ }
+}
+let turn = 0;   // Drehung des Bildschirms in Grad, die Anzeige dreht um -turn zurück
+function counterRotate() {
+  const a = screen.orientation?.angle ?? window.orientation ?? 0;
+  turn = ((a % 360) + 360) % 360;
+  document.body.classList.toggle('quer', turn === 90 || turn === 270);
+  document.body.style.setProperty('--gegen', `${-turn}deg`);
+}
+screen.orientation?.addEventListener?.('change', counterRotate);
+window.addEventListener('orientationchange', counterRotate);
+window.addEventListener('resize', counterRotate);
+counterRotate();
+// Wischweg in Hochformat-Koordinaten zurückdrehen
+function unturn(dx, dy) {
+  const r = turn * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+  return [c * dx - s * dy, s * dx + c * dy];
+}
+
 // Wischen auf dem Gehäuse verschiebt die Sonde, Bewegung wird gesammelt und gebündelt geschickt
 let swipe = null, swipeSum = [0, 0], swipeTimer = 0;
 const pad = $('probeView');
 pad.addEventListener('pointerdown', e => { swipe = [e.clientX, e.clientY]; pad.setPointerCapture(e.pointerId); });
 pad.addEventListener('pointermove', e => {
   if (!swipe) return;
-  swipeSum = [swipeSum[0] + e.clientX - swipe[0], swipeSum[1] + e.clientY - swipe[1]];
+  const [dx, dy] = unturn(e.clientX - swipe[0], e.clientY - swipe[1]);
+  swipeSum = [swipeSum[0] + dx, swipeSum[1] + dy];
   swipe = [e.clientX, e.clientY];
   if (!swipeTimer) swipeTimer = setTimeout(() => { send({ t: 'swipe', d: swipeSum }); swipeSum = [0, 0]; swipeTimer = 0; }, 30);
 });
