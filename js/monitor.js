@@ -147,6 +147,8 @@ function classAt(vol, p) {
   return i < 0 ? 0 : vol.data[i];
 }
 
+const lungWin = () => WINDOWS[state.win].key.startsWith('lung');
+
 // Beschriftung eines Punkts: Gefäße, Herzhöhlen und Blasen mit Namen, Befunde als Flüssigkeit
 const LABELED = TISSUES.map((t, i) => t.tint || i === 1 || i === 10);
 function labelAt(vol, p) {
@@ -157,6 +159,7 @@ function labelAt(vol, p) {
   if (c === 9) return d[i + 2] * 0.5 > 6 ? (SUBLABELS[sub] || 'Herzhöhle') : 'Herzmuskel';
   if (sub && (c === 8 || c === 12)) return SUBLABELS[sub];
   if (c === 1) return WINDOWS[state.win].vol === 'thorax' ? 'Lunge' : 'Darmgas';
+  if (c === 10 && lungWin()) return 'Rippe';
   return LABELED[c] ? TISSUES[c].name : null;
 }
 
@@ -198,7 +201,7 @@ function render() {
   drawPass(vol, M, o, DEBUG ? 1 : 0);
   if (state.anat === 'body') draw3D(vol, M, o, usCanvas);
   drawOverlay(lastM);
-  if (state.tint) drawLabels(overlay.getContext('2d'), labels.fan, overlay.width, overlay.height);
+  if (state.tint) drawLabels(overlay.getContext('2d'), labels.fan, overlay.width, overlay.height, 1, labels.lines);
 }
 
 function drawPass(vol, M, o, debug) {
@@ -268,14 +271,43 @@ function sampleLabels(vol, M, o) {
       }
     }
   }
-  return { all, fan };
+  return { all, fan, lines: lungWin() ? pleuraLines(vol, Lc, Dc, o, off) : [] };
 }
 
-function drawLabels(ctx, map, W, H, scale = 1) {
+// Lunge: Pleuralinie (erste Grenze zur Lunge, nicht im Rippenschatten) und erste A-Linie in doppelter Tiefe.
+// Spalten im Rippenschatten zählen nicht; beschriftet wird die mittlere freie Spalte.
+function pleuraLines(vol, Lc, Dc, o, off) {
+  const cols = [];
+  for (let x = -1.8; x <= 1.81; x += 0.2) {
+    for (let y = 0; y <= state.depth; y += 0.05) {
+      const c = classAt(vol, o.map((v, i) => v + (Lc[i] * x + Dc[i] * y) * 10 + Dc[i] * off));
+      if (c === 10) break;
+      if (c === 1) { cols.push([x, y]); break; }
+    }
+  }
+  if (!cols.length) return [];
+  const [x, g] = cols.reduce((a, b) => (Math.abs(b[0]) < Math.abs(a[0]) ? b : a));
+  const out = [{ text: 'Pleuralinie', x, y: g - 0.3, color: '#ffd84a' }];
+  if (2 * g < state.depth - 0.2) out.push({ text: 'A-Linie', x, y: 2 * g - 0.3, color: '#fff' });
+  return out;
+}
+
+function drawLabels(ctx, map, W, H, scale = 1, fixed = []) {
   const top = topOffset(), sc = H / (state.depth + top), dpr = (window.devicePixelRatio || 1) * scale;
   ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   const placed = [];
+  // feste Beschriftungen (Pleuralinie, A-Linie) zuerst, in ihrer Farbe
+  for (const f of fixed) {
+    const half = ctx.measureText(f.text).width / 2 + 4 * dpr;
+    const x = Math.max(half, Math.min(W - half - 30 * dpr, W / 2 + f.x * sc)), y = (f.y + top) * sc;
+    placed.push([x, y]);
+    ctx.lineWidth = 3 * dpr;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeText(f.text, x, y);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, x, y);
+  }
   // große Organe zuerst, Beschriftungen dürfen sich nicht überdecken
   for (const [c, pts] of [...map].sort((a, b) => b[1].length - a[1].length)) {
     if (pts.length < 3) continue;
@@ -378,6 +410,10 @@ function setProbe(key) {
 }
 function setWindow(i) {
   state.win = i;
+  // jedes Fenster startet mit dem üblichen Schallkopf und seiner Starttiefe
+  const w = WINDOWS[i], p = PROBES[w.hint];
+  state.probe = w.hint;
+  state.depth = Math.max(p.min, Math.min(p.max, w.tiefe || p.def));
   showHoldTip();
   state.slide = [0, 0];
   state.track = null;

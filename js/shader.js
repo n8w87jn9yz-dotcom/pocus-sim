@@ -378,16 +378,18 @@ void main(){
   }
 
   // Knochen: helle Oberfläche, dahinter Schatten (anteilig über die Keule)
-  float shadow = 0.0;
+  float shadow = 0.0, bSurf = 0.0, gSurf = 0.0;
+  bool lungGas = false;
   if (boneD < 0.0 && blockFrac(Pm, 1) > 0.5) boneD = refine(S, dir, max(L - 4.0, 0.0), L, 1);
   if (boneD >= 0.0){
     float d = L - boneD;
     float surf = (1.0 - smoothstep(0.8, 2.6, d))*smoothstep(0.3, 0.7, facing(moved(at(S, dir, boneD), boneD), dir, 1));
     shadow = smoothstep(1.0, 3.0, d);
+    bSurf = surf;
     A = mix(A, lin(0.97)*(0.7 + 0.6*vnoise(Pm*vec3(0.6, 1.2, 0.6))), surf);
   }
+  float shadowMitte = shadow;
   shadow = shadow*0.34 + sideBone*0.66;
-  A *= mix(1.0, 0.03, shadow);
 
   if (gasD < 0.0 && blockFrac(Pm, 2) > 0.5) gasD = refine(S, dir, max(L - 4.0, 0.0), L, 2);
   if (gasD >= 0.0){
@@ -401,6 +403,8 @@ void main(){
     float Ag;
     // helle Grenzfläche (Pleuralinie, Darmwand, Zwerchfell)
     float surf = (1.0 - smoothstep(0.7, 1.8, d))*smoothstep(lungWin ? 0.05 : 0.3, lungWin ? 0.3 : 0.7, facing(moved(at(S, dir, g), g), dir, 2));
+    gSurf = surf;
+    lungGas = lungWin;
     if (surf > 0.999){
       Ag = 0.0;
     } else if (mirror){
@@ -420,6 +424,10 @@ void main(){
   } else if (sideGas > 0.0){
     A *= 1.0 - 0.6*sideGas;
   }
+  // Rippenschatten erst nach dem Gas: auch Pleuralinie und A-Linien liegen im Schatten (Fledermaus-Zeichen)
+  // Spiegelnde Grenzflächen sind viel heller als Gewebe: hinter der Rippe zählt vor allem der Hauptstrahl
+  if (gasD >= 0.0) A *= mix(1.0, 1e-4, max(shadow, 0.9*shadowMitte));
+  else A *= mix(1.0, 0.03, shadow);
 
   // Elektronisches Rauschen: wird mit der Tiefe vom TGC mitverstärkt, füllt echofreie Flächen leicht
   float noise = 0.05*(1.0 + L/60.0)*speckleAt(Pm*2.0, 0.0, 57.0);
@@ -432,6 +440,14 @@ void main(){
   if (uTint == 1 && ((TINTMASK >> c) & 1) == 1 && boneD < 0.0 && gasD < 0.0){
     vec3 pc = PAL[c] / max(max(PAL[c].r, PAL[c].g), PAL[c].b);
     col = col*mix(vec3(1.0), pc, 0.35) + pc*0.05*mask;
+  } else if (uTint == 1 && boneD >= 0.0){
+    // Knochen: Oberfläche kräftig, Schallschatten dahinter nur angedeutet
+    vec3 pc = vec3(1.0, 0.72, 0.35);
+    col = col*mix(vec3(1.0), pc, 0.3 + 0.4*bSurf) + pc*(0.04 + 0.08*bSurf)*mask;
+  } else if (uTint == 1 && lungGas){
+    // Pleuralinie gelb, Lunge (Artefaktbild darunter) hellblau
+    vec3 pl = vec3(1.0, 0.85, 0.25), lu = vec3(0.55, 0.78, 1.0);
+    col = mix(col*mix(vec3(1.0), lu, 0.4) + lu*0.06*mask, pl*max(v, 0.55), 0.85*smoothstep(0.2, 0.6, gSurf));
   }
   outColor = vec4(col, 1.0);
 }`;
