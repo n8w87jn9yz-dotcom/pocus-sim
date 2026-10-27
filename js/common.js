@@ -17,7 +17,7 @@ export const WINDOWS = [
     hold: ['Rechte Flanke, mittlere Axillarlinie, Höhe Rippenbogen', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf'] },
   { name: 'LUQ (splenorenal)', hint: 'convex', vol: 'abdomen', key: 'luq', marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
     hold: ['Linke Flanke, hintere Axillarlinie, etwas höher als rechts', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf (am Handy die rechte Kante)'] },
-  { name: 'Subxiphoidal', hint: 'phased', vol: 'thorax', key: 'subxiphoid', tiefe: 19, marker: 'links', dreh: [1, -1, 1], wisch: -1,
+  { name: 'Subxiphoidal', hint: 'convex', vol: 'thorax', key: 'subxiphoid', tiefe: 19, marker: 'links', dreh: [1, -1, 1], wisch: -1,
     hold: ['Direkt unter dem Schwertfortsatz', 'Schall nach hinten, leicht Richtung Kopf', 'Marker zur rechten Patientenseite'] },
   { name: 'Becken (suprapubisch)', hint: 'convex', vol: 'abdomen', key: 'pelvis', marker: 'links', dreh: [1, -1, 1], wisch: -1,
     hold: ['Knapp über dem Schambein, quer', 'Schall nach hinten, leicht Richtung Füße', 'Marker zur rechten Patientenseite'] },
