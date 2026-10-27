@@ -270,6 +270,40 @@ def make_windows(cls, masks, spacing, wanted):
         o = clear_origin(o / spacing + D * (20 / spacing), L, D, E)
         out['subxiphoid'] = {'origin': o.round(1).tolist(), 'L': L.round(4).tolist(),
                              'D': D.round(4).tolist(), 'E': E.round(4).tolist()}
+    def pleura_tiefe(x, z):
+        """Weg von der Haut bis zur Lunge (Voxel) senkrecht von vorn, dazu: liegt dabei eine Rippe (mind. 3 Voxel dick) im Weg?"""
+        col = cls[x, ::-1, z]
+        haut = np.flatnonzero(col)
+        if not len(haut):
+            return None, False
+        lu = np.flatnonzero(col[haut[0]:] == GAS)
+        if not len(lu):
+            return None, False
+        return lu[0], int((col[haut[0]:haut[0] + lu[0]] == BONE).sum()) >= 3
+
+    def icr_fenster(t, side):
+        """Ansatz im Zwischenrippenraum, an dem im Längsschnitt (4 cm) beide Rippen mit Schatten im Bild liegen
+        (Fledermaus-Zeichen) und die Brustwand möglichst dünn ist, damit die erste A-Linie in 8 cm Tiefe passt.
+        Gesucht wird 1–4 cm lateral vom Ausgangspunkt (dort knöcherne Rippen statt Rippenknorpel)."""
+        h, mitte, breit = int(18 / spacing), int(5 / spacing), 3      # Rippe je Seite: mind. 3 Voxel (4,5 mm) im Bild
+        best = None
+        for dx in np.arange(10, 41, 3) / spacing:
+            x = int(round(t[0] + side * dx))
+            for z in range(int(t[2] - 40 / spacing), int(t[2] + 10 / spacing)):
+                d, _ = pleura_tiefe(x, z)
+                if d is None:
+                    continue
+                rib = [pleura_tiefe(x, z + k)[1] for k in range(-h, h + 1)]
+                links, rechts = sum(rib[:h - mitte]), sum(rib[h + mitte + 1:])
+                if links < breit or rechts < breit or any(rib[h - mitte:h + mitte + 1]):
+                    continue
+                # dünne Brustwand, beide Rippen deutlich und gleichmäßig im Bild
+                # erste A-Linie (doppelte Pleuratiefe) soll in 8 cm passen: Pleura tiefer als 3,7 cm kostet viel
+                sc = d + 5 * max(0, d - 37 / spacing) + 0.1 * abs(z - t[2]) + 0.5 * abs(links - rechts) - min(links, rechts)
+                if best is None or sc < best[0]:
+                    best = (sc, x, z)
+        return best
+
     for key, side in (('lung_r', 1), ('lung_l', -1)):
         if key not in wanted:
             continue
@@ -284,7 +318,15 @@ def make_windows(cls, masks, spacing, wanted):
         xc = np.median(sel[:, 0])                              # etwa Medioklavikularlinie
         sel = sel[np.abs(sel[:, 0] - xc) < 4]
         t = sel[np.argmax(sel[:, 1])].astype(float)            # vorderster Lungenpunkt
-        add(key, t, -A, -S)                                    # sagittal, Marker kranial
+        icr = icr_fenster(t, side)
+        if icr is None:
+            add(key, t, -A, -S)                                # sagittal, Marker kranial
+            continue
+        _, x, z = icr
+        L, D, E = basis(-A, -S)
+        o = skin_point(body, [x, t[1], z], A, spacing)
+        out[key] = {'origin': o.round(1).tolist(), 'L': L.round(4).tolist(), 'D': D.round(4).tolist(),
+                    'E': E.round(4).tolist()}
     if 'pelvis' in wanted:
         t = centroid(cls == FLUID)
         add('pelvis', t, -A - 0.3 * S, -R)                     # transversal, leicht nach kaudal gekippt

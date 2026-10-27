@@ -12,18 +12,19 @@ export const WINDOWS = [
   // marker: Handykante, an der der grüne Marker angezeigt wird.
   // dreh: Vorzeichen je Drehachse der Sonde [Fächern um L, Drehen um D, Kippen in der Bildebene um E] gegenüber dem Handy.
   // wisch: Vorzeichen beim Wischen/Maus-Schieben. Alles nach Simons Tests am Handy (27.10.2026), anpassbar unter „Justage“.
+  // hint: Schallkopf, mit dem das Fenster startet; tiefe: Starttiefe in cm (sonst die des Schallkopfs).
   { name: 'RUQ (Morison)', hint: 'convex', vol: 'abdomen', key: 'ruq', marker: 'links', dreh: [1, -1, 1], wisch: -1,
     hold: ['Rechte Flanke, mittlere Axillarlinie, Höhe Rippenbogen', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf'] },
   { name: 'LUQ (splenorenal)', hint: 'convex', vol: 'abdomen', key: 'luq', marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
     hold: ['Linke Flanke, hintere Axillarlinie, etwas höher als rechts', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf (am Handy die rechte Kante)'] },
-  { name: 'Subxiphoidal', hint: 'phased', vol: 'thorax', key: 'subxiphoid', marker: 'links', dreh: [1, -1, 1], wisch: -1,
+  { name: 'Subxiphoidal', hint: 'phased', vol: 'thorax', key: 'subxiphoid', tiefe: 19, marker: 'links', dreh: [1, -1, 1], wisch: -1,
     hold: ['Direkt unter dem Schwertfortsatz', 'Schall nach hinten, leicht Richtung Kopf', 'Marker zur rechten Patientenseite'] },
   { name: 'Becken (suprapubisch)', hint: 'convex', vol: 'abdomen', key: 'pelvis', marker: 'links', dreh: [1, -1, 1], wisch: -1,
     hold: ['Knapp über dem Schambein, quer', 'Schall nach hinten, leicht Richtung Füße', 'Marker zur rechten Patientenseite'] },
-  { name: 'Lunge rechts', hint: 'linear', vol: 'thorax', key: 'lung_r', marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
-    hold: ['Rechts vorn, 2.–3. Zwischenrippenraum, Medioklavikularlinie', 'Schall senkrecht nach hinten', 'Marker zum Kopf (am Handy die rechte Kante)'] },
-  { name: 'Lunge links', hint: 'linear', vol: 'thorax', key: 'lung_l', marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
-    hold: ['Links vorn, 2.–3. Zwischenrippenraum, Medioklavikularlinie', 'Schall senkrecht nach hinten', 'Marker zum Kopf (am Handy die rechte Kante)'] },
+  { name: 'Lunge rechts', hint: 'linear', vol: 'thorax', key: 'lung_r', tiefe: 8, marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
+    hold: ['Rechts vorn, Zwischenrippenraum knapp lateral der Medioklavikularlinie (zwei Rippen im Bild)', 'Schall senkrecht nach hinten', 'Marker zum Kopf (am Handy die rechte Kante)'] },
+  { name: 'Lunge links', hint: 'linear', vol: 'thorax', key: 'lung_l', tiefe: 8, marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
+    hold: ['Links vorn, Zwischenrippenraum knapp lateral der Medioklavikularlinie (zwei Rippen im Bild)', 'Schall senkrecht nach hinten', 'Marker zum Kopf (am Handy die rechte Kante)'] },
 ];
 
 // Justage am Rechner (localStorage 'pocus-justage2' = { <key>: { marker, um: { faechern, drehen, kippen, wischen } } }):
