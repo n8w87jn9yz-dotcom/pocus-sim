@@ -88,3 +88,10 @@ python tools/build_volume.py --ct ct.nii.gz --seg seg.nii.gz --name thorax --win
 - Freie Flüssigkeit und Perikarderguss sind in die echte Anatomie eingerechnet, nicht aus Patientendaten.
 - Auflösung 1,5 mm (Thorax) bzw. 3 mm Ursprungsdaten (Abdomen). Medizinisch nicht validiert.
 - Die Kopplung nutzt den öffentlichen PeerJS-Server (0.peerjs.com).
+
+## Lizenz
+- Code (alles außer `data/` und `vendor/`): GNU Affero General Public License v3.0, siehe [LICENSE](LICENSE). Copyright (C) 2026 Simon Jacobs.
+  Nachbauen, ändern und weitergeben ist erlaubt. Wer eine geänderte Fassung weitergibt oder als Website betreibt, muss den Quelltext seiner Fassung unter derselben Lizenz offenlegen.
+- Bilddaten und 3D-Modelle in `data/`: abgeleitet aus dem TotalSegmentator-Datensatz, CC BY 4.0, siehe [data/QUELLEN.md](data/QUELLEN.md).
+- Bibliotheken in `vendor/`: jeweils eigene Lizenz (MIT), siehe `vendor/THIRD_PARTY.txt`.
+- Simulation für Ausbildungszwecke, kein Medizinprodukt.
