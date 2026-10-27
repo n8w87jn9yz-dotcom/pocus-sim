@@ -25,7 +25,7 @@
           <h3 id="holdTitle"></h3>
           <img id="holdImg" alt="">
           <ul id="holdList"></ul>
-          <p class="small">Handy kopfüber: <b>Oberkante</b> ist die Schallfläche, die linke Handykante mit dem grünen Marker zeigt in Markerrichtung. So aufsetzen und am Handy den Einschaltknopf drücken.</p>
+          <p class="small">Handy kopfüber: <b>Oberkante</b> ist die Schallfläche, die Handykante mit dem grünen Marker zeigt in Markerrichtung. So aufsetzen und am Handy den Einschaltknopf drücken.</p>
           <div class="buttons"><button id="holdOk" class="active">OK</button><button id="holdOff">Nicht mehr anzeigen</button></div>
         </div>
       </div>
@@ -37,9 +37,9 @@
           <button id="viewReset" title="Kamera wieder der Sonde folgen lassen">Ansicht zurücksetzen</button>
         </details>
         <p class="anat-title" id="anatTitle"></p>
-        <div class="fan-src buttons" id="fanSrc" hidden title="Was die Schallebene im 3D-Modell zeigt">
-          <button data-src="anat" class="active">Ebene: Anatomie</button>
-          <button data-src="us">Ultraschall</button>
+        <div class="fan-src buttons" id="fanSrc" hidden title="Wie der Schall im 3D-Modell gezeigt wird">
+          <button data-src="beam" class="active">Schallfächer</button>
+          <button data-src="us">Mit Bild</button>
           <button data-src="off">Aus</button>
         </div>
       </div>
@@ -112,6 +112,14 @@
       <label class="slider" title="Größe von Puppe oder Partner im Vergleich zum CT-Körper">Größe <input type="range" id="bodyScale" min="40" max="130" step="5" value="100"><span id="bodyScaleVal">100 %</span></label>
     </section>
 
+    <details class="card">
+      <summary>Justage Handy-Sonde</summary>
+      <p class="small">Gilt für das gewählte Fenster: <b id="justWin"></b>. Wird hier im Browser gespeichert. Nach dem Ändern neu kalibrieren.</p>
+      <p class="small">Marker am Handy</p>
+      <div class="buttons" id="justMarker"><button data-v="links">Linke Kante</button><button data-v="rechts">Rechte Kante</button></div>
+      <p class="small">Umkehren (hervorgehoben = umgekehrt)</p>
+      <div class="buttons" id="justUm"><button data-k="kippen" title="In der Bildebene zur Markerseite oder weg">Kippen</button><button data-k="faechern" title="Quer zur Bildebene">Fächern</button><button data-k="drehen" title="Um die Schallrichtung">Drehen</button><button data-k="wischen" title="Wischen am Handy und Maus-Sonde">Schieben</button></div>
+    </details>
     <details class="card experimental">
       <summary>Experimentell</summary>
       <h3>Maus-Sonde</h3>
@@ -141,12 +149,16 @@
 
     <details class="card help">
       <summary>Bedienung</summary>
-      <p>Handy kopfüber halten, die <b>Oberkante</b> ist die Schallkopffläche. Die linke Handykante ist die Markerseite (links im Bild), das Handy zeigt sie grün an.</p>
+      <p>Handy kopfüber halten, die <b>Oberkante</b> ist die Schallkopffläche. Die Markerseite (links im Bild) zeigt das Handy grün an, je nach Fenster an der linken oder rechten Kante.</p>
       <p><b>Kalibrieren:</b> Schallfenster hier am Rechner wählen, Sonde in Standardlage aufsetzen (Phantom, Partner oder in der Luft) und am Handy „Kalibrieren“ tippen. Ab dann folgt das Bild der Bewegung.</p>
       <p><b>Verschieben mit der Maus-Sonde:</b> Funkmaus mit Gummiband oder Klett hinten an die Oberkante des Handys, Maus vorn zeigt von dir weg (sonst bei „Maus“ die Drehung einstellen). „Maus-Sonde starten“ (oder Taste M), dann Sonde ansetzen und am Handy „Kalibrieren“. Die Maus misst das Gleiten, das Handy die Drehung. Den Laptop-Trackpad dabei nicht berühren, Esc beendet. Einmal einmessen: Taste E, Sonde genau 10 cm am Lineal schieben, nochmal E. „Größe“ gleicht Puppe oder Partner an den CT-Körper an.</p>
       <p><b>Ohne Maus:</b> Im Wischfeld am Handy wischen wie auf einem Touchpad: seitlich = entlang der Sonde, nach unten = zu dir hin.</p>
       <p>Standardlagen: RUQ/LUQ koronal in der Axillarlinie, Marker kranial. Subxiphoidal flach unter dem Xiphoid, Richtung linke Schulter, Marker rechts. Becken transversal suprapubisch, Marker rechts. Lunge sagittal 2. ICR medioklavikulär, Marker kranial.</p>
       <p>Ohne Handy: Ziehen im Bild = Kippen und Fächern, mit Umschalttaste = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, Tasten 1–6 = Fenster, L/K/S = Schallkopf, F = Freeze, N = Neutralstellung, A = Anatomieansicht, T = Organe einfärben, R = echtes Vergleichsbild, M = Maus-Sonde.</p>
+    </details>
+    <details class="card">
+      <summary>Datenquellen</summary>
+      <p class="small">CT-Daten und Segmentierung: TotalSegmentator-Datensatz v2.0.1, Fall s0662 (Wasserthal J. et al., Radiology: Artificial Intelligence 2023, <a href="https://doi.org/10.5281/zenodo.10047292" target="_blank" rel="noopener">doi:10.5281/zenodo.10047292</a>), Lizenz <a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a>. Zugeschnitten, neu abgetastet und zu Gewebeklassen und 3D-Modellen umgerechnet. Details: <a href="QUELLEN.md" target="_blank">QUELLEN.md</a>, Software: <a href="THIRD_PARTY.txt" target="_blank">THIRD_PARTY.txt</a>.</p>
     </details>
   </aside>
 </main>

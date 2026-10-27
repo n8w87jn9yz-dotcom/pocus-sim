@@ -27,6 +27,12 @@ const LOOK = {
   fluid: { color: 0xd9c66b, roughness: 0.2, clearcoat: 1, vary: 0.08, opacity: 0.85 },
   artery: { color: 0xc8161d, roughness: 0.28, clearcoat: 0.9, vary: 0.08 },
   vein: { color: 0x2c4fae, roughness: 0.28, clearcoat: 0.9, vary: 0.08 },
+  // Farben wie im Atlas nach Sauerstoffgehalt: Lungenarterien blau, Lungenvenen rot
+  pulmart: { color: 0x2c4fae, roughness: 0.28, clearcoat: 0.9, vary: 0.08 },
+  pulmvene: { color: 0xc8161d, roughness: 0.28, clearcoat: 0.9, vary: 0.08 },
+  // schematisch ergänzte Äste (nicht im CT), etwas matter
+  astart: { color: 0xc8161d, roughness: 0.45, clearcoat: 0.5, vary: 0.05 },
+  astvene: { color: 0x2c4fae, roughness: 0.45, clearcoat: 0.5, vary: 0.05 },
 };
 
 const NAMES = {
@@ -34,6 +40,9 @@ const NAMES = {
   sternum: 'Brustbein (Sternum)', pelvis: 'Becken', cartilage: 'Rippenknorpel', lung: 'Lunge',
   liver: 'Leber', spleen: 'Milz', kidney: 'Niere', heart: 'Herz', bowel: 'Magen und Darm',
   fluid: 'Harnblase / Gallenblase', artery: 'Aorta und Arterien', vein: 'V. cava und Venen',
+  pulmart: 'Truncus pulmonalis / Aa. pulmonales (schematisch ergänzt)', pulmvene: 'Vv. pulmonales',
+  astart: 'Arterienäste (schematisch ergänzt): Truncus coeliacus, AMS, AMI, Aa. renales, A. iliaca interna',
+  astvene: 'Venenäste (schematisch ergänzt): Vv. renales, Vv. hepaticae, V. iliaca interna',
 };
 
 // Ebenen wie im Atlas, einzeln ein- und ausblendbar
@@ -43,7 +52,7 @@ export const LAYERS = [
   { id: 'bone', name: 'Skelett', keys: ['ribs', 'spine', 'sternum', 'pelvis', 'cartilage'], on: true },
   { id: 'lung', name: 'Lunge', keys: ['lung'], on: true },
   { id: 'organs', name: 'Organe', keys: ['liver', 'spleen', 'kidney', 'heart', 'bowel', 'fluid'], on: true },
-  { id: 'vessels', name: 'Gefäße', keys: ['artery', 'vein'], on: true },
+  { id: 'vessels', name: 'Gefäße', keys: ['artery', 'vein', 'pulmart', 'pulmvene', 'astart', 'astvene'], on: true },
 ];
 
 // GLSL: Rauschen im Raum (mm) für Oberflächenstruktur und Farbschwankung
@@ -183,7 +192,6 @@ export function fanShape(kind, depthMm) {
   }
   return pts;
 }
-// Schallebene mit dem Ultraschallbild als Textur und blauem Rand
 // Polygon auf den Streifen |x| <= half beschneiden (Sutherland-Hodgman), wie der sichtbare Bildausschnitt
 function clipX(pts, half) {
   let out = pts;
@@ -201,23 +209,64 @@ function clipX(pts, half) {
   }
   return out;
 }
-function fanMesh(kind, depthMm, topMm, wMm, tex) {
-  // Der Fächer wird so breit gezeigt wie das Ultraschallbild auf dem Monitor
-  const pts = clipX(fanShape(kind, depthMm), wMm / 2 - 0.5);
+// Schallstrahl: hell an der Sonde, zur Tiefe hin auslaufend (v = 1 an der Sonde, 0 in voller Tiefe)
+let beamTex = null;
+function beamTexture() {
+  if (beamTex) return beamTex;
+  const c = document.createElement('canvas');
+  c.width = 4; c.height = 256;
+  const ctx = c.getContext('2d');
+  const gr = ctx.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, 'rgba(110,215,255,0.9)'); gr.addColorStop(0.4, 'rgba(70,175,255,0.62)'); gr.addColorStop(1, 'rgba(50,130,255,0.22)');
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, 4, 256);
+  beamTex = new THREE.CanvasTexture(c);
+  beamTex.colorSpace = THREE.SRGBColorSpace;
+  return beamTex;
+}
+// Tiefenbögen alle 5 cm im Fächer (wie die Tiefenskala am Gerät)
+function depthMarks(kind, depthMm) {
+  const lines = [];
+  for (let d = 50; d < depthMm - 5; d += 50) {
+    if (kind === 'linear') { lines.push([[-20, d], [20, d]]); continue; }
+    const [r0, a, c] = kind === 'convex' ? [40, 0.62, -40] : [0.01, 0.78, 0];
+    const arc = [];
+    for (let i = 0; i <= 24; i++) { const t = -a + (2 * a * i) / 24; arc.push([Math.sin(t) * (r0 + d), c + Math.cos(t) * (r0 + d)]); }
+    lines.push(arc);
+  }
+  return lines;
+}
+// Schallfächer im Sondensystem. src 'beam': der ganze Fächer als durchscheinender Strahl („Kaffeefilter“),
+// src 'us': das Ultraschallbild als Textur, so breit wie auf dem Monitor
+function fanMesh(kind, depthMm, topMm, wMm, tex, src) {
+  const beam = src === 'beam';
+  const pts = beam ? fanShape(kind, depthMm) : clipX(fanShape(kind, depthMm), wMm / 2 - 0.5);
   const g = new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))), 48);
-  // UV wie im Ultraschallbild: v = 1 oben (Tiefe -topMm), u über die Breite des Canvas
   const pos = g.attributes.position, uv = g.attributes.uv;
-  for (let i = 0; i < pos.count; i++) uv.setXY(i, 0.5 + pos.getX(i) / wMm, 1 - (pos.getY(i) + topMm) / (depthMm + topMm));
+  // Ultraschallbild: v = 1 oben (Tiefe -topMm), u über die Breite des Canvas; Strahl: v nach der Tiefe
+  for (let i = 0; i < pos.count; i++) {
+    if (beam) uv.setXY(i, 0.5, 1 - Math.max(0, pos.getY(i)) / depthMm);
+    else uv.setXY(i, 0.5 + pos.getX(i) / wMm, 1 - (pos.getY(i) + topMm) / (depthMm + topMm));
+  }
   const grp = new THREE.Group();
   const plane = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
-    map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.97, depthWrite: false, depthTest: false,
-    toneMapped: false,
+    map: beam ? beamTexture() : tex, side: THREE.DoubleSide, transparent: true, opacity: beam ? 1 : 0.97,
+    depthWrite: false, depthTest: false, toneMapped: false,
   }));
-  const edge = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts.map(([x, y]) => new THREE.Vector3(x, y, 0))),
-    new THREE.LineBasicMaterial({ color: 0x4fb3ff, transparent: true, opacity: 0.9, depthTest: false }));
+  const lineMat = new THREE.LineBasicMaterial({ color: beam ? 0xbfeaff : 0x4fb3ff, transparent: true, opacity: beam ? 1 : 0.9, depthTest: false });
+  const edge = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts.map(([x, y]) => new THREE.Vector3(x, y, 0))), lineMat);
   plane.renderOrder = edge.renderOrder = 20;
   grp.add(plane, edge);
-  grp.userData.dispose = () => { g.dispose(); edge.geometry.dispose(); };
+  const geos = [g, edge.geometry];
+  if (beam) {
+    const markMat = new THREE.LineBasicMaterial({ color: 0xcff0ff, transparent: true, opacity: 0.35, depthTest: false });
+    for (const l of depthMarks(kind, depthMm)) {
+      const m = new THREE.Line(new THREE.BufferGeometry().setFromPoints(l.map(([x, y]) => new THREE.Vector3(x, y, 0))), markMat);
+      m.renderOrder = 21;
+      grp.add(m);
+      geos.push(m.geometry);
+    }
+  }
+  grp.userData.dispose = () => { for (const x of geos) x.dispose(); };
   return grp;
 }
 
@@ -391,7 +440,7 @@ export class Anatomy3D {
   }
 
   // o: Ursprung der Sonde (mm), M: Spalten L, D, E im RAS-System; us: Canvas des Ultraschallbilds
-  update({ o, M, kind, depthCm, topCm, us, usAspect }) {
+  update({ o, M, kind, depthCm, topCm, us, usAspect, src = 'beam' }) {
     if (!this.current) return;
     if (this.probeKind !== kind) {
       if (this.probe) this.scene.remove(this.probe);
@@ -414,17 +463,18 @@ export class Anatomy3D {
       this.usTex.colorSpace = THREE.SRGBColorSpace;
       this.fanKey = null;
     }
-    const fk = `${kind}|${depthCm}|${topCm}|${usAspect.toFixed(3)}`;
+    const fk = `${kind}|${depthCm}|${topCm}|${usAspect.toFixed(3)}|${src}`;
     if (this.fanKey !== fk) {
       if (this.fan) { this.scene.remove(this.fan); this.fan.userData.dispose(); }
-      this.fan = fanMesh(kind, depthCm * 10, topCm * 10, (depthCm + topCm) * 10 * usAspect, this.usTex);
+      this.fan = fanMesh(kind, depthCm * 10, topCm * 10, (depthCm + topCm) * 10 * usAspect, this.usTex, src);
+      this.fanSrc = src;
       this.fan.matrixAutoUpdate = false;
       this.scene.add(this.fan);
       this.fanKey = fk;
     }
     this.fan.matrix.copy(basis);
     this.fan.visible = this.showFan;
-    if (this.showFan) this.usTex.needsUpdate = true;
+    if (this.showFan && src === 'us') this.usTex.needsUpdate = true;
     if (!this.userMoved) this.frame(o, D, E);
   }
 

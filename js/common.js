@@ -9,19 +9,45 @@ export const PROBES = {
 // vol/key verweisen auf data/<vol>/meta.json -> windows[key]
 // hold: Halte-Hinweis beim Fensterwechsel (Ort, Schallrichtung, Marker), passend zu den Achsen in meta.json
 export const WINDOWS = [
-  { name: 'RUQ (Morison)', hint: 'convex', vol: 'abdomen', key: 'ruq',
+  // marker: Handykante, an der der grüne Marker angezeigt wird.
+  // dreh: Vorzeichen je Drehachse der Sonde [Fächern um L, Drehen um D, Kippen in der Bildebene um E] gegenüber dem Handy.
+  // wisch: Vorzeichen beim Wischen/Maus-Schieben. Alles nach Simons Tests am Handy (27.10.2026), anpassbar unter „Justage“.
+  { name: 'RUQ (Morison)', hint: 'convex', vol: 'abdomen', key: 'ruq', marker: 'links', dreh: [1, -1, 1], wisch: -1,
     hold: ['Rechte Flanke, mittlere Axillarlinie, Höhe Rippenbogen', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf'] },
-  { name: 'LUQ (splenorenal)', hint: 'convex', vol: 'abdomen', key: 'luq',
-    hold: ['Linke Flanke, hintere Axillarlinie, etwas höher als rechts', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf'] },
-  { name: 'Subxiphoidal', hint: 'phased', vol: 'thorax', key: 'subxiphoid',
+  { name: 'LUQ (splenorenal)', hint: 'convex', vol: 'abdomen', key: 'luq', marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
+    hold: ['Linke Flanke, hintere Axillarlinie, etwas höher als rechts', 'Schall quer in den Körper (nach medial)', 'Marker zum Kopf (am Handy die rechte Kante)'] },
+  { name: 'Subxiphoidal', hint: 'phased', vol: 'thorax', key: 'subxiphoid', marker: 'links', dreh: [1, -1, 1], wisch: -1,
     hold: ['Direkt unter dem Schwertfortsatz', 'Schall nach hinten, leicht Richtung Kopf', 'Marker zur rechten Patientenseite'] },
-  { name: 'Becken (suprapubisch)', hint: 'convex', vol: 'abdomen', key: 'pelvis',
+  { name: 'Becken (suprapubisch)', hint: 'convex', vol: 'abdomen', key: 'pelvis', marker: 'links', dreh: [1, -1, 1], wisch: -1,
     hold: ['Knapp über dem Schambein, quer', 'Schall nach hinten, leicht Richtung Füße', 'Marker zur rechten Patientenseite'] },
-  { name: 'Lunge rechts', hint: 'linear', vol: 'thorax', key: 'lung_r',
-    hold: ['Rechts vorn, 2.–3. Zwischenrippenraum, Medioklavikularlinie', 'Schall senkrecht nach hinten', 'Marker zum Kopf'] },
-  { name: 'Lunge links', hint: 'linear', vol: 'thorax', key: 'lung_l',
-    hold: ['Links vorn, 2.–3. Zwischenrippenraum, Medioklavikularlinie', 'Schall senkrecht nach hinten', 'Marker zum Kopf'] },
+  { name: 'Lunge rechts', hint: 'linear', vol: 'thorax', key: 'lung_r', marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
+    hold: ['Rechts vorn, 2.–3. Zwischenrippenraum, Medioklavikularlinie', 'Schall senkrecht nach hinten', 'Marker zum Kopf (am Handy die rechte Kante)'] },
+  { name: 'Lunge links', hint: 'linear', vol: 'thorax', key: 'lung_l', marker: 'rechts', dreh: [-1, -1, -1], wisch: 1,
+    hold: ['Links vorn, 2.–3. Zwischenrippenraum, Medioklavikularlinie', 'Schall senkrecht nach hinten', 'Marker zum Kopf (am Handy die rechte Kante)'] },
 ];
+
+// Justage am Rechner (localStorage 'pocus-justage2' = { <key>: { marker, um: { faechern, drehen, kippen, wischen } } }):
+// Markerseite und Umkehrungen gegenüber den Werten aus WINDOWS
+export const ACHSEN = ['faechern', 'drehen', 'kippen'];
+let justage = {};
+try { justage = JSON.parse(localStorage.getItem('pocus-justage2') || '{}') || {}; } catch { /* Standardwerte */ }
+export function winCfg(i) {
+  const w = WINDOWS[i] || WINDOWS[0], j = justage[w.key] || {}, um = j.um || {};
+  return {
+    marker: j.marker === 'rechts' || j.marker === 'links' ? j.marker : w.marker,
+    dreh: w.dreh.map((v, k) => um[ACHSEN[k]] ? -v : v),
+    wisch: um.wischen ? -w.wisch : w.wisch,
+    um,
+  };
+}
+export function setJustage(i, patch) {
+  const w = WINDOWS[i], j = { marker: winCfg(i).marker, um: { ...(justage[w.key]?.um || {}) } };
+  if (patch.marker) j.marker = patch.marker;
+  if (patch.um) Object.assign(j.um, patch.um);
+  for (const k in j.um) if (!j.um[k]) delete j.um[k];
+  if (j.marker === w.marker && !Object.keys(j.um).length) delete justage[w.key]; else justage[w.key] = j;
+  try { localStorage.setItem('pocus-justage2', JSON.stringify(justage)); } catch { /* gilt dann nur bis zum Neuladen */ }
+}
 
 // Bit pro Befund, passt zu uCase im Shader
 export const FINDINGS = [
@@ -130,8 +156,18 @@ export function rotZ(a) { const c = Math.cos(a), s = Math.sin(a); return [[c, -s
 // Handy kopfüber, Oberkante = Schallkopffläche, linke Handykante = Marker (links im Bild).
 // Geräteachsen: x = lateral, +y = Tiefe, -z = Elevation. Szene: y zeigt in die Tiefe.
 // Aus der Kalibrierlage Rn und der aktuellen Lage Rc wird die Sondenlage in der Szene.
-export function probeMatrix(Rn, Rc) {
-  const Rrel = matMul(matT(Rn), Rc);
-  const s = [1, 1, -1];
-  return Rrel.map((r, i) => r.map((v, j) => s[i] * v * s[j]));
+// dreh: Vorzeichen je Drehachse (Sondensystem L, D, E). Die relative Drehung wird als Quaternion genommen und ihr
+// Vektoranteil achsweise umgekehrt; so lässt sich jede Achse einzeln umdrehen, bei den Lagen aus WINDOWS genügt das.
+export function quatFromMat(m) {
+  const t = m[0][0] + m[1][1] + m[2][2];
+  let x, y, z, w;
+  if (t > 0) { const s = 2 * Math.sqrt(t + 1); w = s / 4; x = (m[2][1] - m[1][2]) / s; y = (m[0][2] - m[2][0]) / s; z = (m[1][0] - m[0][1]) / s; }
+  else if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) { const s = 2 * Math.sqrt(1 + m[0][0] - m[1][1] - m[2][2]); w = (m[2][1] - m[1][2]) / s; x = s / 4; y = (m[0][1] + m[1][0]) / s; z = (m[0][2] + m[2][0]) / s; }
+  else if (m[1][1] > m[2][2]) { const s = 2 * Math.sqrt(1 + m[1][1] - m[0][0] - m[2][2]); w = (m[0][2] - m[2][0]) / s; x = (m[0][1] + m[1][0]) / s; y = s / 4; z = (m[1][2] + m[2][1]) / s; }
+  else { const s = 2 * Math.sqrt(1 + m[2][2] - m[0][0] - m[1][1]); w = (m[1][0] - m[0][1]) / s; x = (m[0][2] + m[2][0]) / s; y = (m[1][2] + m[2][1]) / s; z = s / 4; }
+  return [x, y, z, w];
+}
+export function probeMatrix(Rn, Rc, dreh = [-1, -1, 1]) {
+  const [x, y, z, w] = quatFromMat(matMul(matT(Rn), Rc));
+  return matFromQuat([dreh[0] * x, dreh[1] * y, dreh[2] * z, w]);
 }
