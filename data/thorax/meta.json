@@ -73,5 +73,11 @@
    ]
   }
  },
- "source": "TotalSegmentator-Datensatz v2.0.1, Fall s0662 (Wasserthal et al., CC BY 4.0, doi:10.5281/zenodo.10047292)"
+ "source": "TotalSegmentator-Datensatz v2.0.1, Fall s0662 (Wasserthal et al., CC BY 4.0, doi:10.5281/zenodo.10047292)",
+ "offset": [
+  1.1,
+  1.0,
+  311.0
+ ],
+ "offset_ref": "abdomen"
 }

@@ -23,6 +23,7 @@ Reine statische Web-App ohne Build-Schritt.
 - `tools/build_meshes.py`: baut daraus die 3D-Modelle `data/<name>/anatomy.glb` (`python tools/build_meshes.py --name thorax`, danach mit `npx @gltf-transform/cli meshopt` komprimieren)
 - `data/`: fertige Volumen, siehe [data/QUELLEN.md](data/QUELLEN.md)
 - `docs/architektur.md`: Architektur und Entscheidungen
+- `xr.html`: Quest-3-Version in Mixed Reality an der Laerdal Resus Anne (Phase 0), siehe [docs/xr.md](docs/xr.md); Gehäuse in `hardware/`
 
 ## Umfang
 Fenster: RUQ, LUQ, subxiphoidal, Becken, Lunge rechts/links (eFAST).
@@ -72,11 +73,19 @@ Ohne Handy: lokal `python3 -m http.server` im Repo und `http://localhost:8000` �
 Maus ziehen = Kippen/Fächern, Umschalttaste + ziehen = Drehen, Mausrad = Tiefe, Pfeiltasten = Verschieben, 1–6 = Fenster, A = Anatomieansicht, T = Einfärben.
 `?h=300` rendert mit geringerer Auflösung, `?debug` zeigt die Gewebeklassen farbig.
 
+## Quest 3 (Mixed Reality)
+1. In der Quest im Browser die Pages-Adresse mit `/xr.html` öffnen, warten bis „Bereit“, „Mixed Reality starten“.
+2. Sondengehäuse und Kalibrierbock aus `hardware/` drucken (PETG, liegend auf der breiten Seite, Stützen nur am Sattel),
+   rechten Controller mit dem Griffende in den Sattel setzen und mit 25-mm-Klettband festzurren.
+3. In der Brille den Anweisungen folgen: Sonde einmessen, sechs eFAST-Punkte an der Puppe antippen, schallen.
+   Ohne Brille: `xr.html?sim` zeigt den Ablauf mit simulierter Puppe.
+
 ## Volumen neu bauen
 ```
 pip install TotalSegmentator
 TotalSegmentator -i ct.nii.gz -o seg.nii.gz --ml
 python tools/build_volume.py --ct ct.nii.gz --seg seg.nii.gz --name thorax --windows subxiphoid,lung_r,lung_l
+python tools/align_volumes.py --ref abdomen --vol thorax   # gemeinsamer Körperraum für xr.html
 ```
 
 ## Grenzen
