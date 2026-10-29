@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POCUS-Simulator XR (Quest 3)</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
+<style>
+  body.xr { margin: 0; padding: 24px; max-width: 760px; }
+  .xr h1 { font-size: 22px; margin: 0 0 6px; }
+  .xr ol { padding-left: 20px; line-height: 1.5; }
+  .xr button.big { font-size: 18px; padding: 12px 22px; margin: 12px 0; }
+  .xr .views { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .xr .views canvas { background: #000; border: 1px solid var(--line); max-width: 100%; }
+  .xr #scene { width: 100%; height: 360px; display: block; }
+  .xr table { border-collapse: collapse; font-size: 13px; }
+  .xr td, .xr th { border-bottom: 1px solid var(--line); padding: 3px 8px; text-align: left; }
+</style>
+</head>
+<body class="xr">
+<h1>POCUS-Simulator XR</h1>
+<p class="small">eFAST an der Laerdal Resus Anne mit der Meta Quest 3. Phase 0: Tracking, Registrierung und Bildleistung testen.</p>
+<p class="status" id="status">Lade CT …</p>
+<button class="big" id="enter" disabled>Mixed Reality starten</button>
+<button id="sim" title="Ohne Brille: simulierte Puppe und Sonde, zum Testen am Rechner">Simulation am Rechner</button>
+
+<h2>Ablauf in der Brille</h2>
+<ol>
+  <li><b>Sonde einmessen</b> (nur beim ersten Mal, bleibt gespeichert): Sondenloch auf den Kegel des Kalibrierbocks setzen, Trigger halten und die Sonde 10 s in alle Richtungen kreisen. Danach Sonde mit der Schallfläche flach auf den Tisch, Marker zeigt von dir weg, Trigger.</li>
+  <li><b>Puppe registrieren</b> (bei jedem Start): Sonde nacheinander in Standardlage auf die sechs eFAST-Punkte setzen und jeweils Trigger drücken. B nimmt den letzten Punkt zurück.</li>
+  <li><b>Schallen.</b> Rechter Stick: hoch/runter Tiefe, links/rechts Gain. A: Freeze. B: Schallkopf wechseln.
+    Linke Hand: Griff halten verschiebt das Gerät, X nächster Fall, Y Anatomie in der Puppe ein/aus,
+    Stick drücken: neu registrieren. Rechter Stick drücken: Sonde neu einmessen.</li>
+</ol>
+<p class="small">Adresse mit <code>?hand=left</code>, wenn die Sonde am linken Controller sitzt; <code>?h=240</code> für ein kleineres, schnelleres Bild; <code>?jeder=1</code> rechnet das Bild in jedem Brillenbild statt in jedem zweiten.</p>
+
+<div class="views">
+  <canvas id="us" width="400" height="300"></canvas>
+  <canvas id="hud" width="1024" height="400" style="width:512px"></canvas>
+</div>
+<canvas id="scene"></canvas>
+<div id="result"></div>
+
+<script type="module" src="js/xr.js"></script>
+</body>
+</html>
