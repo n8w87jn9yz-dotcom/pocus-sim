@@ -33,6 +33,7 @@ Maßstab 1,08, RUQ-Bild deckungsgleich mit dem Monitor.
 ## Offen nach Phase 0
 - ❓ Hält das Controller-Tracking dicht über der Puppe, wenn die Hand das Gehäuse umgreift?
 - ❓ GPU-Zeit des Shaders auf der Quest (Anzeige im Gerät), ggf. `?h=240` oder Nachbarstrahlen abschalten
-- Registrierung geht beim Neustart verloren (keine persistenten Anker), Sonden-Einmessung bleibt
+- Registrierung geht beim Neustart oder Neuzentrieren verloren (keine persistenten Anker), Sonden-Einmessung bleibt
+- Drehung der Sonde um die Schallachse kommt aus der Blickrichtung beim Tischschritt (±10-20° ❓); später aus den Registrierpunkten nachschärfen
 - Doppelter Ladecode in `monitor.js` und `usrender.js`, später zusammenführen
 - Beschriftung der Organe (`sampleLabels`) und Fallsteuerung vom Trainer-Laptop fehlen noch

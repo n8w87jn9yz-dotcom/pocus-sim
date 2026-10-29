@@ -66,11 +66,11 @@ const light = new THREE.DirectionalLight(0xffffff, 1.5);
 light.position.set(0.5, 2, 1);
 scene.add(light);
 
-const usTex = new THREE.CanvasTexture(usCanvas);
-usTex.colorSpace = THREE.SRGBColorSpace;
+// Textur aus einer Canvas eines anderen Kontexts: ohne Mipmaps, damit das Hochladen auf der Quest billig bleibt
+const canvasTex = c => Object.assign(new THREE.CanvasTexture(c), { colorSpace: THREE.SRGBColorSpace, generateMipmaps: false, minFilter: THREE.LinearFilter });
+const usTex = canvasTex(usCanvas);
 const hudCanvas = $('hud');
-const hudTex = new THREE.CanvasTexture(hudCanvas);
-hudTex.colorSpace = THREE.SRGBColorSpace;
+const hudTex = canvasTex(hudCanvas);
 // virtuelles Gerät: Bild 32 x 24 cm, darunter die Anzeige
 const monitor = new THREE.Group();
 const screenW = 0.32;
@@ -113,6 +113,9 @@ let anatLoaded = false;
 async function loadAnatomy() {
   if (anatLoaded) return;
   anatLoaded = true;
+  try { await loadAnatomyFiles(); } catch (err) { anatLoaded = false; state.note = `Anatomie nicht geladen: ${err.message}`; }
+}
+async function loadAnatomyFiles() {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   for (const name of ['abdomen', 'thorax']) {
     const g = await loader.loadAsync(`data/${name}/anatomy.glb`);
@@ -155,12 +158,19 @@ function readXR(xrFrame) {
   return out;
 }
 const pressed = (h, hand, i) => !!h?.buttons[i] && !prev[hand][i];
+const holdT = { left: 0, right: 0 };
+function held(h, hand, i, dt) {
+  if (!h?.buttons[i]) { holdT[hand] = 0; return false; }
+  const before = holdT[hand];
+  holdT[hand] += dt;
+  return before < 1 && holdT[hand] >= 1;
+}
 
+// Blickrichtung waagerecht; null, wenn fast senkrecht nach unten geschaut wird
 function headForward() {
   const d = new THREE.Vector3();
   renderer.xr.getCamera().getWorldDirection(d);
-  d.y = 0;
-  return norm([d.x, d.y, d.z]);
+  return Math.hypot(d.x, d.z) < 0.3 ? null : norm([d.x, 0, d.z]);
 }
 
 // ---------- Ablauf ----------
@@ -184,7 +194,9 @@ function finishPivot() {
 
 function captureTable(h) {
   // Schallfläche nach unten, Marker zeigt von dir weg: Marker liegt auf -L (wie in WINDOWS/meta.json)
-  const D = [0, -1, 0], L = headForward().map(v => -v), E = cross(L, D);
+  const f = headForward();
+  if (!f) return setMode('table', 'Beim Trigger bitte geradeaus schauen, nicht senkrecht nach unten.');
+  const D = [0, -1, 0], L = f.map(v => -v), E = cross(L, D);
   calib.Roff = matMul(matT(h.R), cols(L, D, E));
   try { localStorage.setItem(STORE, JSON.stringify(calib)); } catch { /* gilt nur bis zum Neuladen */ }
   setMode('points', 'Sonde eingemessen und gespeichert.');
@@ -234,8 +246,9 @@ function scan(tip, Rw) {
 
 function handleInput(H, dt) {
   const P = H[PROBE_HAND], O = H[OTHER_HAND];
-  if (P && calib?.Roff && pressed(P, PROBE_HAND, 3)) setMode('pivot', 'Sonde neu einmessen.');
-  if (O && pressed(O, OTHER_HAND, 3) && calib?.Roff) setMode('points', 'Puppe neu registrieren.');
+  // Stick 1 s gedrückt halten: rechts Sonde neu einmessen, links Puppe neu registrieren (kurzes Mitklicken zählt nicht)
+  if (held(P, PROBE_HAND, 3, dt)) setMode('pivot', 'Sonde neu einmessen.');
+  if (held(O, OTHER_HAND, 3, dt) && calib?.Roff) setMode('points', 'Puppe neu registrieren.');
   if (O && pressed(O, OTHER_HAND, 4)) state.scenario = (state.scenario + 1) % SCENARIOS.length;
   if (O && pressed(O, OTHER_HAND, 5)) { state.anatomy = !state.anatomy; if (state.anatomy) loadAnatomy(); }
   // linker Griff: Gerät mitnehmen
@@ -246,6 +259,9 @@ function handleInput(H, dt) {
     monitor.matrix.decompose(monitor.position, monitor.quaternion, monitor.scale);
   } else grab = null;
   if (!P) return;
+  // Controller außer Sicht der Kameras: Lage nur geschätzt, nichts aufnehmen
+  if (P.emulated) { state.note = 'Sonde nicht im Blick der Brille.'; return; }
+  if (state.note === 'Sonde nicht im Blick der Brille.') state.note = '';
   if (state.mode === 'pivot') {
     if (P.buttons[0]) pivotSamples.push({ R: P.R, p: P.p });
     else if (prev[PROBE_HAND][0]) finishPivot();
@@ -331,7 +347,8 @@ renderer.setAnimationLoop((now, xrFrame) => {
   const H = xrFrame ? readXR(xrFrame) : sim ? sim(dt) : {};
   if (xrFrame && !placed) placeMonitor();
   if (state.mode !== 'load') handleInput(H, dt);
-  for (const hand of ['left', 'right']) prev[hand] = H[hand]?.buttons || [];
+  // nur aktualisieren, wenn die Hand da ist: sonst gilt eine gehaltene Taste nach einem Aussetzer als neu gedrückt
+  for (const hand of ['left', 'right']) if (H[hand]) prev[hand] = H[hand].buttons;
   anatGroup.visible = state.anatomy && anatGroup.children.length > 0;
   if (frameNo % 6 === 0) drawHud();
   renderer.render(scene, camera);
@@ -347,9 +364,17 @@ function placeMonitor() {
 }
 
 $('enter').addEventListener('click', async () => {
-  const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'] });
+  let session;
+  try { session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'] }); }
+  catch (err) { $('status').textContent = `Mixed Reality nicht gestartet: ${err.message}`; return; }
   placed = false;
+  session.addEventListener('end', () => { monitor.visible = false; });
   await renderer.xr.setSession(session);
+  // Neu zentriert (Meta-Taste lang) oder Raum neu erkannt: Weltursprung verschoben, Registrierung stimmt nicht mehr
+  renderer.xr.getReferenceSpace()?.addEventListener('reset', () => {
+    if (calib?.Roff) setMode('points', 'Raum neu ausgerichtet: bitte Puppe neu registrieren.');
+    placed = false;
+  });
 });
 
 // ---------- Simulation am Rechner ----------
